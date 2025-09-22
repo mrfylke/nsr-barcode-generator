@@ -18,6 +18,7 @@ program
   .version(version);
 
 program
+  .command("file")
   .argument("<file>", "path to the file containing IDs (one per line)")
   .requiredOption(
     "-o, --output <directory>",
@@ -70,6 +71,49 @@ program
         } else {
           console.error(`Error: ${error.message}`);
         }
+      } else {
+        console.error("An unexpected error occurred");
+      }
+      process.exit(1);
+    }
+  });
+
+program
+  .command("id")
+  .argument("<nsrId>", "single NSR ID (e.g., NSR:StopPlace:39598)")
+  .requiredOption(
+    "-o, --output <directory>",
+    "output directory for generated PDF"
+  )
+  .description("Generate PDF for a single NSR ID")
+  .action(async (nsrId: string, options: { output: string }) => {
+    try {
+      // Validate the NSR ID format
+      if (!nsrId.startsWith("NSR:StopPlace:")) {
+        console.error(
+          `Error: Invalid NSR ID format. Expected format: NSR:StopPlace:XXXXX`
+        );
+        process.exit(1);
+      }
+
+      console.log(`Generating PDF for ID: ${nsrId}`);
+      console.log(`Output directory: ${options.output}`);
+
+      const pdfResult = await generatePdfsForIds([nsrId], {
+        outputDirectory: options.output,
+      });
+
+      console.log(`\nPDF Generation Complete:`);
+      console.log(`- Generated ${pdfResult.totalGenerated} PDF file`);
+      console.log(`- Output directory: ${pdfResult.outputDirectory}`);
+
+      if (pdfResult.totalGenerated === 0) {
+        console.error(`Error: Failed to generate PDF for ID: ${nsrId}`);
+        process.exit(1);
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error(`Error: ${error.message}`);
       } else {
         console.error("An unexpected error occurred");
       }
