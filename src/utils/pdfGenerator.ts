@@ -80,9 +80,10 @@ async function generateSinglePdf(
 ): Promise<void> {
   return new Promise(async (resolve, reject) => {
     try {
-      // Create a new PDF document
+      // Create a new PDF document in landscape mode
       const doc = new PDFDocument({
         size: "A4",
+        layout: "landscape",
         margins: {
           top: 50,
           bottom: 50,
@@ -99,96 +100,58 @@ async function generateSinglePdf(
       const pageWidth = doc.page.width;
       const pageHeight = doc.page.height;
 
-      // Calculate center position
-      const centerX = pageWidth / 2;
-      const centerY = pageHeight / 2;
+      // Define colors matching the FRAM design
+      const framBlue = "#2E5B8A";
+      const white = "#FFFFFF";
+      const lightGray = "#F5F5F5";
+      const darkGray = "#333333";
 
-      // Calculate box height based on available information
-      const hasStopInfo = stopPlaceInfo && stopPlaceInfo.name;
-      const boxWidth = 400;
-      const boxHeight = hasStopInfo ? 280 : 200;
-      const boxX = centerX - boxWidth / 2;
-      const boxY = centerY - boxHeight / 2;
+      // Header section (blue background)
+      const headerHeight = 120;
+      doc.rect(0, 0, pageWidth, headerHeight).fill(framBlue);
+
+      // Add bus icon (simple circle with bus emoji)
+      const iconX = 80;
+      const iconY = 60;
+      const iconSize = 50;
 
       doc
-        .rect(boxX, boxY, boxWidth, boxHeight)
-        .stroke("#333333")
-        .fillColor("#f9f9f9")
-        .rect(boxX + 2, boxY + 2, boxWidth - 4, boxHeight - 4)
-        .fill();
+        .lineWidth(3)
+        .circle(iconX, iconY, iconSize / 2)
+        .stroke(white);
 
-      let currentY = boxY + 20;
-
-      // Add the ID text centered at the top
+      // Add bus icon text
       doc
-        .fillColor("#333333")
-        .fontSize(22)
+        .fillColor(white)
+        .fontSize(20)
         .font("Helvetica-Bold")
-        .text(id, boxX, currentY, {
-          width: boxWidth,
-          align: "center",
+        .text("🚌", iconX - 10, iconY - 10);
+
+      // Add stop name in header
+      const stopName = stopPlaceInfo?.name || id;
+      doc
+        .fillColor(white)
+        .fontSize(36)
+        .font("Helvetica-Bold")
+        .text(stopName, 150, 40, {
+          width: pageWidth - 200,
+          align: "left",
         });
 
-      currentY += 35;
+      // Main content area
+      const contentY = headerHeight + 40;
 
-      // Add stop place name if available
-      if (stopPlaceInfo?.name) {
-        doc
-          .fillColor("#2c5aa0")
-          .fontSize(18)
-          .font("Helvetica-Bold")
-          .text(stopPlaceInfo.name, boxX, currentY, {
-            width: boxWidth,
-            align: "center",
-          });
+      // QR Code section (left side)
+      const qrX = 80;
+      const qrY = contentY;
+      const qrSize = 120;
 
-        currentY += 25;
-      }
-
-      // Add location information if available
-      if (stopPlaceInfo?.municipality || stopPlaceInfo?.county) {
-        const locationText = [stopPlaceInfo.municipality, stopPlaceInfo.county]
-          .filter(Boolean)
-          .join(", ");
-
-        doc
-          .fillColor("#666666")
-          .fontSize(12)
-          .font("Helvetica")
-          .text(locationText, boxX, currentY, {
-            width: boxWidth,
-            align: "center",
-          });
-
-        currentY += 20;
-      }
-
-      // Add transport modes if available
-      if (
-        stopPlaceInfo?.transportMode &&
-        stopPlaceInfo.transportMode.length > 0
-      ) {
-        const modesText = `Transport: ${stopPlaceInfo.transportMode.join(
-          ", "
-        )}`;
-        doc
-          .fillColor("#666666")
-          .fontSize(10)
-          .font("Helvetica")
-          .text(modesText, boxX, currentY, {
-            width: boxWidth,
-            align: "center",
-          });
-
-        currentY += 15;
-      }
-
-      // Generate QR code for the Entur map URL
+      // Generate QR code
       const url = `https://entur.no/kart/stoppested?id=${encodeURIComponent(
         id
       )}`;
       const qrCodeDataURL = await QRCode.toDataURL(url, {
-        width: 100,
+        width: 200,
         margin: 1,
         color: {
           dark: "#000000",
@@ -196,16 +159,132 @@ async function generateSinglePdf(
         },
       });
 
-      // Convert data URL to buffer and add to PDF
       const base64Data = qrCodeDataURL.split(",")[1];
       if (base64Data) {
         const qrCodeBuffer = Buffer.from(base64Data, "base64");
-        const qrSize = 80;
-        const qrX = centerX - qrSize / 2;
-        const qrY = currentY + 10;
-
         doc.image(qrCodeBuffer, qrX, qrY, { width: qrSize, height: qrSize });
       }
+
+      // Text content (center and right)
+      const textStartX = qrX + qrSize + 50;
+      const rightColumnX = pageWidth - 320;
+
+      // Norwegian section
+      doc
+        .fillColor(darkGray)
+        .fontSize(24)
+        .font("Helvetica-Bold")
+        .text("Når kjem bussen?", textStartX, contentY);
+
+      doc
+        .fillColor(darkGray)
+        .fontSize(14)
+        .font("Helvetica")
+        .text("Opne mobilkameraet ditt og hald", textStartX, contentY + 40)
+        .text("kameralinsa over QR-koden. Lenka", textStartX, contentY + 60)
+        .text(
+          "fører deg til Entur, og viser busslinjer og",
+          textStartX,
+          contentY + 80
+        )
+        .text(
+          "avgangar frå haldeplassen du står på.",
+          textStartX,
+          contentY + 100
+        );
+
+      // English section
+      doc
+        .fillColor(darkGray)
+        .fontSize(24)
+        .font("Helvetica-Bold")
+        .text("When will the bus", textStartX, contentY + 140)
+        .text("arrive?", textStartX, contentY + 165);
+
+      doc
+        .fillColor(darkGray)
+        .fontSize(14)
+        .font("Helvetica")
+        .text("Open your mobile camera and hold", textStartX, contentY + 200)
+        .text(
+          "camera lens over the QR code. The link",
+          textStartX,
+          contentY + 220
+        )
+        .text(
+          "takes you to Entur, and shows bus lines",
+          textStartX,
+          contentY + 240
+        )
+        .text(
+          "and departures from the stop you are at.",
+          textStartX,
+          contentY + 260
+        );
+
+      // Add vertical line separating center and right columns
+      const separatorX = rightColumnX - 12;
+      doc
+        .lineWidth(0.25)
+        .moveTo(separatorX, contentY)
+        .lineTo(separatorX, contentY + 280)
+        .stroke("#000000");
+
+      // Right column - Additional info (aligned with "Opne mobilkameraet ditt ...")
+      const rightColumnStartY = contentY + 40;
+
+      doc
+        .fillColor(darkGray)
+        .fontSize(16)
+        .font("Helvetica-Bold")
+        .text("Informasjon om bussavgangar", rightColumnX, rightColumnStartY)
+        .text("finn du også på:", rightColumnX, rightColumnStartY + 20);
+
+      doc
+        .fillColor(darkGray)
+        .fontSize(16)
+        .font("Helvetica")
+        .text(
+          "Information about bus departures",
+          rightColumnX,
+          rightColumnStartY + 40
+        )
+        .text("can also be found at:", rightColumnX, rightColumnStartY + 60);
+
+      doc
+        .fillColor(darkGray)
+        .fontSize(14)
+        .font("Helvetica")
+        .text("• App / app: ", rightColumnX, rightColumnStartY + 100);
+
+      doc
+        .font("Helvetica-Bold")
+        .text("FRAM / Entur", rightColumnX + 80, rightColumnStartY + 100);
+
+      doc
+        .font("Helvetica")
+        .text("• Nettside / website: ", rightColumnX, rightColumnStartY + 125);
+
+      doc
+        .font("Helvetica-Bold")
+        .text("frammr.no", rightColumnX + 130, rightColumnStartY + 125);
+
+      // Footer with FRAM logo area
+      const footerY = pageHeight - 80;
+      doc.rect(0, footerY, pageWidth, 80).fill(framBlue);
+
+      // FRAM logo text (simplified)
+      doc
+        .fillColor(white)
+        .fontSize(24)
+        .font("Helvetica-Bold")
+        .text("FRAM", pageWidth - 150, footerY + 25);
+
+      doc
+        .fillColor(white)
+        .fontSize(10)
+        .font("Helvetica")
+        .text("Møre og Romsdal fylkeskommune", pageWidth - 220, footerY + 55);
 
       // Finalize the PDF
       doc.end();
