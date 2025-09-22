@@ -248,7 +248,7 @@ async function generateSinglePdf(
       const qrSize = 120;
 
       // Generate QR code
-      const url = `https://entur.no/kart/stoppested?id=${encodeURIComponent(
+      const url = `https://reise.frammr.no/departures/${encodeURIComponent(
         id
       )}`;
       const qrCodeDataURL = await QRCode.toDataURL(url, {

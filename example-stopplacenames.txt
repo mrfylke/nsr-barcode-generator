@@ -1,0 +1,521 @@
+Gatestopp Moa
+Molde trafikkterminal
+Ålesund rutebilstasjon
+Ålesund hurtigbåtkai Skateflukaia
+Gatestopp Moa
+Hareid hurtigbåtkai
+Røysegata
+Ålesund sjukehus
+Langevåg hurtigbåtkai
+Campus Ålesund
+Moa trafikkterminal
+Blixvalen
+Rådhusplassen
+St. Hanshaugen
+Hauaplassen
+St. Olavs plass
+Futura rv. 70
+Nerparken
+Hauaplassen
+Elnesvågen skolesenter
+Ulsteinvik skysstasjon
+Hareid bussterminal
+Vestnes sentrum
+Volda rutebilstasjon
+Campus Ålesund
+Ytterland
+Porten
+Spjelkavikskiftet
+Garneskrysset
+Lerheimskaia
+Hamnsund hurtigbåtkai
+Apotekertorget
+Røysebakken
+Valderøya hurtigbåtkai
+Kolvikbakken
+Volda rutebilstasjon
+Magerholm ferjekai
+Ørsta rutebilstasjon
+Steinvågbakken
+Nordlandskrysset rv. 70
+Øye skoler
+Volsdalen skole
+Hatlasvingen
+Betania
+Klipra
+Skarbøvika
+Nørvegata vest
+Atlanten
+Moldegård
+Bruhagen sentrum
+Digernesskiftet
+Furene
+Campus Ålesund nord
+Kverve
+Gåseid
+Tuenesvegen
+Sykkylven
+Blindheimssenteret
+Skrenten
+Malaga
+Osane
+Campus Molde
+Flisnes
+Vindgårdskiftet
+Dronning Sonjas Plass
+Sunndalsøra
+Nørvasund
+Porten
+Averøy ungdomsskole
+Langevåg skule
+Ulstein vgs.
+Øfstisvingen
+Hatlelia
+Giske ungdomsskule
+Apotekertorget
+Synnalandsdalen
+Puskhola
+Kirkegata
+Skateflukaia
+Ratviksvingen
+Goma
+Leitesvingen
+Klipra
+Helland skule
+Kristiansund lufthavn Kvernberget
+Ytterland
+Emblem skole
+Nørvegata vest
+Eidsvåg
+Ørsta rutebilstasjon
+Hamnsund
+Moavegen
+Sunndal ungdomsskole
+Pensjonisten
+Roseby øst
+Nørvasund
+Molde sjukehus
+Hatlasvingen
+Djupdalen øst
+Kverve
+Spjelkavik ungdomsskole
+Hessaskaret syd
+Spjelkavik barneskole
+Molde ferjekai
+Volsdalen skole
+Kristiansund trafikkterminal
+Kolvikbakken
+Fosnavåg terminal
+Jogarden
+Torget
+Sjøholt
+Martingjerdet
+Roseby sør
+Åsestranda
+Bergsøya Krifast
+Ellingsøy ungdomsskole
+Pensjonisten
+Skodje skular
+Åse vest
+Bolsønes
+Skei
+Åndalsnes stasjon
+Stokksund
+Klipra øst
+Gåseidsmeden
+Ratviksvingen
+Storgata
+Rørstadvegen
+Furneset ferjekai
+Gåseidsmeden
+Midsund skule
+Kårvåg Atlanterhavsvegen
+Herøy vgs
+Borgund vgs. Brusdalsvegen
+Årølia
+Spjelkavik sentrum
+Åse
+Vegsund trevare
+Sævollen
+Fuglset Bunnpris
+Batnfjordsøra
+Hellandbakken
+Romsdal vgs.
+Gursken oppvekstsenter
+Årølia
+Frei ungdomsskole
+Eide
+Furmyrhagen
+Bønørve
+Utstillingsplassen
+Valle
+Sunnmøre museum
+Martingjerdet
+Sellanrå skole
+Sylte skule
+Gåseid
+Spjelkavikskiftet
+Kviltorp camping
+Øvre Berg
+Skåtadalen
+Djupdalen
+Årøhagen
+Brattvåg kyrkje
+Tomrefjord skule
+Digernesskiftet
+Bergmo
+Spjelkavik sentrum
+Malaga
+Østrem
+Myrabakken
+Osane
+Vågsetra skole
+Øye skoler
+Åse
+Nerøykrysset
+Blindheimsskiftet
+Sjøholt
+Simabakken
+Slinningsodden
+Roseby nord
+Skråvika
+Blindheim ungdomsskole
+Skjeltene ved brua
+Leitesvingen
+Urdalen
+Roald
+Simabakken
+Mauseidvåg
+Sunnmøre museum
+Borgund vgs. Brusdalsvegen
+Hessa skole
+Brendehaug gamlevegen
+Volsdalsberga
+Roseby øst
+Sundeskiftet
+Batnfjord skule
+Ulstein vgs.
+Kirkekrysset
+Smøla skole
+Blindheimshallen
+Famo
+Bjørkavåg kryss
+Aure
+Volda rutebilstasjon
+Kviltorp skole
+Vaskeriet
+Moldegård
+Bjørset
+Eide skole
+Korsvika terrasse
+Vatne
+Gossen skole
+Tresfjord kro
+Myrland snuplass
+Skei
+Godøy skule
+Årølivegen/Kvilarvegen
+Sommero
+Hovdebakken
+Sula ungdomsskule
+Halset
+Groven sør
+Reknes
+Tingvoll skole
+Nordmørssenteret
+Riskeveien
+Campus Molde
+Olsvik barnehage
+Brattvåg, ID-huset
+Stranda kai
+Puskhola
+Myrvåglomma
+Ytreberg
+Tresfjord skule
+Cuba
+Rensvik skole
+Åndalsnes ungdomsskole
+Hjellmyrnakken
+Torvteigen
+Hessa mat
+Blindheimsbreivika
+Blindheimshallen
+Valderøy barneskule
+Vigra skule
+Kårvåg barneskole
+Godø
+Batnfjordsøra
+Årseth øst gamlevegen
+Sande skole
+Midtre Skjong
+Storfjordvegen
+Bjørkavåg kryss
+Abc-veien
+Ytreberg
+Vikenes vest gamleveien
+Veibust
+Broa i Breivika
+Stangvik oppvekstsenter
+Kleivane
+Lerstadtoppen
+Liavegen
+Trollhaugen
+Molde lufthavn Årø
+Ytterland
+Gjøsundsæter
+Larsgården
+Langmyra skole
+Aukra ferjekai
+Solnørdal
+Haramsøy skule
+Frænavegen Moldelivegen
+Larsnes ferjekai
+Spjelkavik vgs.
+Brusdal skule
+Emblem
+Øysenteret
+Åndalsnes stasjon
+Realskolen
+Parkgata
+Flisneskrysset
+Lerstadnakken
+Eide Auto
+Syvde skule
+Olsvollen
+Årøkrysset
+Giske rådhus
+Ludvikdalen
+Fiskå
+Seilet
+Kviltorp
+Skarbøvika
+Idrettsparken
+Volda vgs.
+Rødalsvegen
+Hopen sentrum
+Myrlandsvegen
+Skodje rådhus
+Frænavegen Bergsbakken
+Hustad skole
+Groven
+Hareid ungdomsskule
+Ørsta videregåande skule
+Øvre Roald
+Solavågen ferjekai
+Skjevik skole
+Isfjorden oppvekstsenter
+Holskrysset
+Futura rv. 70
+Øran øst
+Rørstadvegen
+Jendem
+Åfarnes
+Kleive
+Hellandsvik
+Nerbø/Birkelandvegen
+Skodje sentrum
+Høgskolen i Molde
+Rødalsvegen
+Lerstadnakken
+Alnes
+Valderhaugstrand
+Leirvåg
+Årølivegen/Kvilarvegen
+Lerstadbakken
+Ba
+Fuglset Bunnpris
+Tuenesvegen
+Skjevikåsen butikken
+Solholmen ferjekai
+Gujord bru
+Akerhallen
+Møre barne- og ungdomsskule
+Steinvågbakken
+Straumsnes skole
+Demingane
+Mikkelhaugen
+Årseth gamlevegen
+Straumen
+Kirkegata
+Melkvikan
+Knausensenteret
+Isfjorden
+Blindheimssenteret
+Kårvåg bedehus
+Atlanten
+Blindheimsskiftet
+Malmefjorden
+Broa i Breivika
+Keiser Wilhelms gate
+Søvik skule
+Betania
+Røvik
+Fiskarstrand skule
+Høgnakken
+Øksenvågen
+Frei skole
+Bud
+Fuglsettjønna
+Berg aust
+Gjerdesmettvegen
+Bjørkfinkvegen sør
+Romsdal vgs.
+Røsslyngveien
+Kjelklia
+Einerskaret
+Liabygda ferjekai
+Vegsund
+Volda ferjekai
+Løkkemyra Handelspark
+Sjøholt
+Brattvåg, sparebanken
+Åneskrysset
+Molde vgs.
+Volda sjukehus
+Valldal sentrum
+Valedekta
+Leitebakkrysset
+Måseide skule
+Slinningen syd
+Nordbyen skole
+Stokke barnehage
+Rabbevågskiftet
+Skodjevåg
+Sirivegen
+Haukås skole
+Skjong nordre
+Giske rådhus
+Hessa bedehus
+Rørstad
+Solbakken terrasse
+Kringkastingshusa
+Tverrveien
+Tennfjord
+Løndalskiftet
+Atlanterhavstunnelen
+Asplivegen
+Kreklingen
+Leirajordet
+Einevegen
+Festøya ferjekai
+Furmyrhagen
+Falkhytten
+Lerstadtoppen
+Furneskrysset
+Moavegen
+Valldal skule
+Fylkeshusa
+Myrabakken
+Eggesbønes
+Finnøya ferjekai
+Kleivane tankanlegg
+Vartdal
+Alexandraparken
+Sæterenga
+Rensvik Kvalvågveien
+Frænavegen Bolsøyvegen
+Bingsa industrifelt
+Arnvika
+Sykkylven sentrum
+Skålasenteret
+Bekkevoll ungdomsskole
+Røbekk
+Store Kalvøy hurtigbåtkai
+Sæbø
+Tredal skole
+Einebæråsen
+Bæverfjord skole
+Rådhusbakken
+Melkvikan rv. 70
+Kiperviktorget E136
+Råkhaugvegen
+Hoelsanden
+Haramsøy skule
+Nedre Fuglset
+Stranda ferjekai
+Nedre Årødalskryss
+Volda ferjekai
+Urdalen
+Åheim
+Svendsengarden
+Synes byggefelt
+Vik skole
+Vestnesbukta
+Bjerkelund skole
+Giske bedehus
+Bjørset
+Fiskarstrand skule
+Biltilsynet
+Hustadmarmor
+Åsbygda
+Furneset
+Bakkemyr
+Øverbøen
+Hønebukta
+Elnesvågen
+Fosnavåg terminal
+Tredalsvegen Slettgata
+Olsvika
+Ulstein Verft
+Olav Oksviks veg
+Frei skole
+Håvikmyrane
+Slotsvik vest
+Moen
+Persløkka
+Pilotveien
+Volda vgs.
+Sula ungdomsskule
+Øksendal
+Tustna barne- og ungdomsskole
+Holstad
+Fiskarstrand
+Lyngstad skole
+Bjørge vest gamlevegen
+Hoff vest
+Sjukehuslomma
+Rindal rutebilstasjon
+Hustad
+Skjevikåsen butikken
+Brattvåg kyrkje
+Tandstad skule
+Skarabakken
+Dimna skule
+Hallebygdskiftet
+Vevang
+Hollingsholmen ferjekai
+Rørstad
+Simabakken
+Bergmo
+Granlia/Ingrids veg
+Leirgrovvik vest
+Bruhagen sentrum
+Veiholmen
+Hagelin
+Solholmen ferjekai
+Næringsveien
+Ringstad skule
+Hamna
+Sætra
+Sjøholt
+Solavågseidet
+Skåthaugen barnehage
+Torget
+Nordlandskrysset rv. 70
+Volda sjukehus
+Rensvik rv. 70
+Tøndergård
+Brusdalen
+Høgset E39
+Skjærahøgda
+Glamox
+Løkkemyra
+Flatsetøya småbåthavn rv. 70
+Lande
+Eidseter
+Seivikakrysset
+Håhjemsvika
+Lubbenes
+Årø
+Hestehagen
+Årøneset
