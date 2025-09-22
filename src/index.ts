@@ -14,41 +14,38 @@ const program = new Command();
 
 program
   .name("nsr-barcode")
-  .description(
-    "A CLI tool to count unique IDs from input files and generate PDFs"
-  )
+  .description("Generate PDF files for unique IDs from input files")
   .version(version);
 
 program
   .argument("<file>", "path to the file containing IDs (one per line)")
-  .option("-o, --output <directory>", "output directory for generated PDFs")
-  .description(
-    "Count unique IDs from an input file and optionally generate PDFs"
+  .requiredOption(
+    "-o, --output <directory>",
+    "output directory for generated PDFs"
   )
-  .action(async (filePath: string, options: { output?: string }) => {
+  .description("Generate PDF files for unique IDs from an input file")
+  .action(async (filePath: string, options: { output: string }) => {
     try {
       const content = await readFile(filePath);
       const result = await parseUniqueIds(content);
       console.log(formatIdCountResult(result));
 
-      // Generate PDFs if output directory is specified
-      if (options.output) {
-        console.log(`\nGenerating PDFs in directory: ${options.output}`);
-        const uniqueIdsArray = Array.from(result.uniqueIds);
+      // Generate PDFs for all unique IDs
+      console.log(`\nGenerating PDFs in directory: ${options.output}`);
+      const uniqueIdsArray = Array.from(result.uniqueIds);
 
-        const pdfResult = await generatePdfsForIds(uniqueIdsArray, {
-          outputDirectory: options.output,
-        });
+      const pdfResult = await generatePdfsForIds(uniqueIdsArray, {
+        outputDirectory: options.output,
+      });
 
-        console.log(`\nPDF Generation Complete:`);
-        console.log(`- Generated ${pdfResult.totalGenerated} PDF files`);
-        console.log(`- Output directory: ${pdfResult.outputDirectory}`);
+      console.log(`\nPDF Generation Complete:`);
+      console.log(`- Generated ${pdfResult.totalGenerated} PDF files`);
+      console.log(`- Output directory: ${pdfResult.outputDirectory}`);
 
-        if (pdfResult.totalGenerated !== uniqueIdsArray.length) {
-          console.warn(
-            `Warning: Only ${pdfResult.totalGenerated} of ${uniqueIdsArray.length} PDFs were generated successfully`
-          );
-        }
+      if (pdfResult.totalGenerated !== uniqueIdsArray.length) {
+        console.warn(
+          `Warning: Only ${pdfResult.totalGenerated} of ${uniqueIdsArray.length} PDFs were generated successfully`
+        );
       }
     } catch (error) {
       if (error instanceof Error) {

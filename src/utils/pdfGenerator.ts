@@ -89,9 +89,9 @@ async function generateSinglePdf(
       const centerX = pageWidth / 2;
       const centerY = pageHeight / 2;
 
-      // Draw a border rectangle
-      const boxWidth = 300;
-      const boxHeight = 80;
+      // Draw a border rectangle (made taller to accommodate URL)
+      const boxWidth = 350;
+      const boxHeight = 120;
       const boxX = centerX - boxWidth / 2;
       const boxY = centerY - boxHeight / 2;
 
@@ -107,7 +107,18 @@ async function generateSinglePdf(
         .fillColor("#333333")
         .fontSize(24)
         .font("Helvetica-Bold")
-        .text(id, boxX, boxY + boxHeight / 2 - 12, {
+        .text(id, boxX, boxY + 20, {
+          width: boxWidth,
+          align: "center",
+        });
+
+      // Add the URL below the ID
+      const url = `http://example.com/${encodeURIComponent(id)}`;
+      doc
+        .fillColor("#666666")
+        .fontSize(14)
+        .font("Helvetica")
+        .text(url, boxX, boxY + 60, {
           width: boxWidth,
           align: "center",
         });

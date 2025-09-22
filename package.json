@@ -1,7 +1,7 @@
 {
   "name": "nsr-barcode-generator",
   "version": "1.0.0",
-  "description": "A CLI tool to count unique IDs from input files",
+  "description": "A CLI tool to generate PDF files for unique IDs from input files",
   "main": "dist/index.js",
   "bin": {
     "nsr-barcode": "dist/index.js"
