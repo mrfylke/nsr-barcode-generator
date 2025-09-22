@@ -1,10 +1,23 @@
 {
   "name": "nsr-barcode-generator",
   "version": "1.0.0",
-  "description": "A CLI tool to generate PDF files for unique IDs from input files",
+  "description": "A CLI tool and programmatic API to generate PDF files for unique NSR IDs",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "bin": {
     "nsr-barcode": "dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    },
+    "./api": {
+      "types": "./dist/api.d.ts",
+      "import": "./dist/api.js",
+      "require": "./dist/api.js"
+    }
   },
   "scripts": {
     "build": "tsc",
@@ -16,8 +29,14 @@
   },
   "keywords": [
     "cli",
-    "file",
-    "typescript"
+    "api",
+    "pdf",
+    "barcode",
+    "qr-code",
+    "nsr",
+    "entur",
+    "typescript",
+    "public-transport"
   ],
   "author": "",
   "license": "MIT",

@@ -1,4 +1,6 @@
-# NSR Barcode Generator
+# API Usage Examples
+
+The NSR Barcode Generator now provides both CLI and programmatic API access.
 
 ## Programmatic Usage
 
@@ -122,88 +124,33 @@ nsr-barcode validate NSR:StopPlace:39598
 nsr-barcode parse ids.txt
 ```
 
-## Installation
+## API Reference
 
-```bash
-# Install dependencies
-pnpm install
+### Classes
 
-# Build the project
-pnpm run build
-```
+#### `NsrBarcodeApi`
 
-## Usage
+Static class providing all API functionality.
 
-### Development
+**Methods:**
 
-```bash
-# Run in development mode
-pnpm run dev <file-path>
+- `processFile(options: ProcessFileOptions): Promise<ProcessFileResult>`
+- `generateSinglePdf(options: GenerateSinglePdfOptions): Promise<GenerateSinglePdfResult>`
+- `generateMultiplePdfs(nsrIds: string[], options: PdfGenerationOptions): Promise<PdfGenerationResult>`
+- `validateNsrId(nsrId: string): ValidationResult`
+- `parseIds(content: string): Promise<IdParseResult>`
+- `parseIdsFromFile(filePath: string): Promise<IdParseResult>`
 
-# Example
-pnpm run dev ./example.txt
-```
+### Types
 
-### Production
+All TypeScript types are exported and available for use:
 
-```bash
-# Build and run
-pnpm run build
-pnpm start <file-path>
-
-# Or use the binary directly after building
-./dist/index.js <file-path>
-```
-
-### Command Line Options
-
-```bash
-# Show help
-nsr-barcode --help
-
-# Show version
-nsr-barcode --version
-
-# Read a file
-nsr-barcode path/to/your/file.txt
-```
-
-## Development Scripts
-
-- `pnpm run build` - Compile TypeScript to JavaScript
-- `pnpm run dev` - Run in development mode with tsx
-- `pnpm run watch` - Watch for changes and rebuild
-- `pnpm run clean` - Clean the dist directory
-- `pnpm start` - Run the built application
-
-## Project Structure
-
-```
-src/
-├── index.ts           # Main CLI entry point
-└── utils/
-    └── fileReader.ts  # File reading utility
-```
-
-## Architecture
-
-The project follows a clean architecture pattern:
-
-- **Entry Point** (`src/index.ts`): Handles CLI argument parsing and orchestrates the application flow
-- **Utilities** (`src/utils/`): Contains reusable utility functions with proper error handling
-- **Configuration**: Modern TypeScript configuration with strict type checking
-
-## Error Handling
-
-The tool provides user-friendly error messages for common scenarios:
-
-- File not found
-- Permission denied
-- Directory instead of file
-- Other file system errors
-
-## Requirements
-
-- Node.js >= 18.0.0
-- pnpm >= 8.0.0
-- TypeScript 5.x
+- `ProcessFileOptions`
+- `ProcessFileResult`
+- `GenerateSinglePdfOptions`
+- `GenerateSinglePdfResult`
+- `PdfGenerationOptions`
+- `PdfGenerationResult`
+- `ValidationResult`
+- `IdParseResult`
+- `IdParseError`
