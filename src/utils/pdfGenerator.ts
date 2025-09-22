@@ -210,8 +210,10 @@ async function generateSinglePdf(
           align: "left",
         });
 
-      // Main content area
-      const contentY = headerHeight + 40;
+      // Main content area - centered vertically
+      const availableHeight = pageHeight - headerHeight - 80; // 80 is footer height
+      const contentHeight = 280; // Approximate total height of all content
+      const contentY = headerHeight + (availableHeight - contentHeight) / 2;
 
       // QR Code section (left side)
       const qrX = 80;
