@@ -2,6 +2,8 @@ import PDFDocument from "pdfkit";
 import { promises as fs } from "fs";
 import { resolve, join } from "path";
 import { createWriteStream } from "fs";
+import * as QRCode from "qrcode";
+import { enturApi, StopPlaceInfo } from "./enturApi";
 
 export interface PdfGenerationOptions {
   outputDirectory: string;
@@ -31,17 +33,27 @@ export async function generatePdfsForIds(
 
   const generatedFiles: string[] = [];
 
-  for (const id of ids) {
+  // Fetch stop place information for all IDs in parallel
+  console.log("Fetching stop place information from Entur API...");
+  const stopPlaceInfos = await enturApi.getMultipleStopPlaces(ids);
+
+  for (let i = 0; i < ids.length; i++) {
+    const id = ids[i];
+    const stopPlaceInfo = stopPlaceInfos[i];
+
+    if (!id) continue; // Skip if ID is undefined
+
     try {
       // Generate safe filename from ID
       const filename = generateSafeFilename(id);
       const outputPath = join(outputDirectory, `${filename}.pdf`);
 
-      // Generate PDF
-      await generateSinglePdf(id, outputPath);
+      // Generate PDF with stop place information
+      await generateSinglePdf(id, outputPath, stopPlaceInfo);
       generatedFiles.push(outputPath);
 
-      console.log(`Generated PDF: ${filename}.pdf`);
+      const infoText = stopPlaceInfo?.name ? ` (${stopPlaceInfo.name})` : "";
+      console.log(`Generated PDF: ${filename}.pdf${infoText}`);
     } catch (error) {
       console.error(`Failed to generate PDF for ID "${id}":`, error);
       // Continue with other IDs even if one fails
@@ -56,15 +68,17 @@ export async function generatePdfsForIds(
 }
 
 /**
- * Generates a single PDF with centered ID
+ * Generates a single PDF with centered ID and stop place information
  * @param id - The ID to display
  * @param outputPath - Output file path
+ * @param stopPlaceInfo - Optional stop place information from Entur API
  */
 async function generateSinglePdf(
   id: string,
-  outputPath: string
+  outputPath: string,
+  stopPlaceInfo?: StopPlaceInfo | null
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
     try {
       // Create a new PDF document
       const doc = new PDFDocument({
@@ -89,9 +103,10 @@ async function generateSinglePdf(
       const centerX = pageWidth / 2;
       const centerY = pageHeight / 2;
 
-      // Draw a border rectangle (made taller to accommodate URL)
-      const boxWidth = 350;
-      const boxHeight = 120;
+      // Calculate box height based on available information
+      const hasStopInfo = stopPlaceInfo && stopPlaceInfo.name;
+      const boxWidth = 400;
+      const boxHeight = hasStopInfo ? 280 : 200;
       const boxX = centerX - boxWidth / 2;
       const boxY = centerY - boxHeight / 2;
 
@@ -102,26 +117,95 @@ async function generateSinglePdf(
         .rect(boxX + 2, boxY + 2, boxWidth - 4, boxHeight - 4)
         .fill();
 
-      // Add the ID text centered
+      let currentY = boxY + 20;
+
+      // Add the ID text centered at the top
       doc
         .fillColor("#333333")
-        .fontSize(24)
+        .fontSize(22)
         .font("Helvetica-Bold")
-        .text(id, boxX, boxY + 20, {
+        .text(id, boxX, currentY, {
           width: boxWidth,
           align: "center",
         });
 
-      // Add the URL below the ID
-      const url = `http://example.com/${encodeURIComponent(id)}`;
-      doc
-        .fillColor("#666666")
-        .fontSize(14)
-        .font("Helvetica")
-        .text(url, boxX, boxY + 60, {
-          width: boxWidth,
-          align: "center",
-        });
+      currentY += 35;
+
+      // Add stop place name if available
+      if (stopPlaceInfo?.name) {
+        doc
+          .fillColor("#2c5aa0")
+          .fontSize(18)
+          .font("Helvetica-Bold")
+          .text(stopPlaceInfo.name, boxX, currentY, {
+            width: boxWidth,
+            align: "center",
+          });
+
+        currentY += 25;
+      }
+
+      // Add location information if available
+      if (stopPlaceInfo?.municipality || stopPlaceInfo?.county) {
+        const locationText = [stopPlaceInfo.municipality, stopPlaceInfo.county]
+          .filter(Boolean)
+          .join(", ");
+
+        doc
+          .fillColor("#666666")
+          .fontSize(12)
+          .font("Helvetica")
+          .text(locationText, boxX, currentY, {
+            width: boxWidth,
+            align: "center",
+          });
+
+        currentY += 20;
+      }
+
+      // Add transport modes if available
+      if (
+        stopPlaceInfo?.transportMode &&
+        stopPlaceInfo.transportMode.length > 0
+      ) {
+        const modesText = `Transport: ${stopPlaceInfo.transportMode.join(
+          ", "
+        )}`;
+        doc
+          .fillColor("#666666")
+          .fontSize(10)
+          .font("Helvetica")
+          .text(modesText, boxX, currentY, {
+            width: boxWidth,
+            align: "center",
+          });
+
+        currentY += 15;
+      }
+
+      // Generate QR code for the Entur map URL
+      const url = `https://entur.no/kart/stoppested?id=${encodeURIComponent(
+        id
+      )}`;
+      const qrCodeDataURL = await QRCode.toDataURL(url, {
+        width: 100,
+        margin: 1,
+        color: {
+          dark: "#000000",
+          light: "#FFFFFF",
+        },
+      });
+
+      // Convert data URL to buffer and add to PDF
+      const base64Data = qrCodeDataURL.split(",")[1];
+      if (base64Data) {
+        const qrCodeBuffer = Buffer.from(base64Data, "base64");
+        const qrSize = 80;
+        const qrX = centerX - qrSize / 2;
+        const qrY = currentY + 10;
+
+        doc.image(qrCodeBuffer, qrX, qrY, { width: qrSize, height: qrSize });
+      }
 
       // Finalize the PDF
       doc.end();
