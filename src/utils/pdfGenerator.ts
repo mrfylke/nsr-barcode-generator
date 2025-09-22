@@ -101,31 +101,103 @@ async function generateSinglePdf(
       const pageHeight = doc.page.height;
 
       // Define colors matching the FRAM design
-      const framBlue = "#2E5B8A";
+      const framBlue = "#1A4D75";
       const white = "#FFFFFF";
       const lightGray = "#F5F5F5";
       const darkGray = "#333333";
 
-      // Header section (blue background)
-      const headerHeight = 120;
-      doc.rect(0, 0, pageWidth, headerHeight).fill(framBlue);
+      // Add rounded border box around entire content
+      const borderRadius = 15;
+      const borderMargin = 20;
+      const boxWidth = pageWidth - borderMargin * 2;
+      const boxHeight = pageHeight - borderMargin * 2;
 
-      // Add bus icon (simple circle with bus emoji)
+      doc
+        .lineWidth(0.25)
+        .roundedRect(
+          borderMargin,
+          borderMargin,
+          boxWidth,
+          boxHeight,
+          borderRadius
+        )
+        .stroke("#000000");
+
+      // Header section (blue background) - clipped to border box
+      const headerHeight = 80;
+      doc
+        .save()
+        .roundedRect(
+          borderMargin,
+          borderMargin,
+          boxWidth,
+          boxHeight,
+          borderRadius
+        )
+        .clip()
+        .rect(borderMargin, borderMargin, boxWidth, headerHeight)
+        .fill(framBlue)
+        .restore();
+
+      // Add transport mode specific icon
       const iconX = 80;
       const iconY = 60;
       const iconSize = 50;
 
-      doc
-        .lineWidth(3)
-        .circle(iconX, iconY, iconSize / 2)
-        .stroke(white);
+      try {
+        // Determine icon based on transport mode
+        const transportModes = stopPlaceInfo?.transportMode || [];
+        let iconFileName = "Bus.png"; // Default to bus
 
-      // Add bus icon text
-      doc
-        .fillColor(white)
-        .fontSize(20)
-        .font("Helvetica-Bold")
-        .text("🚌", iconX - 10, iconY - 10);
+        // Check each transport mode (can be string or array of strings)
+        const modes = Array.isArray(transportModes)
+          ? transportModes
+          : [transportModes];
+        const modeString = modes.join(" ").toLowerCase();
+
+        if (modeString.includes("water") || modeString.includes("boat")) {
+          iconFileName = "Boat.png";
+        } else if (modeString.includes("ferry")) {
+          iconFileName = "Ferry.png";
+        } else if (modeString.includes("bus")) {
+          iconFileName = "Bus.png";
+        }
+
+        const iconPath = join(process.cwd(), "images", iconFileName);
+        const iconBuffer = await fs.readFile(iconPath);
+
+        // Add white circular background
+        doc
+          .lineWidth(3)
+          .circle(iconX, iconY, iconSize / 2)
+          .stroke(white)
+          .circle(iconX, iconY, iconSize / 2)
+          .stroke(white);
+
+        // Add the transport mode icon
+        const iconImageSize = iconSize * 0.6; // Make icon slightly smaller than circle
+        const iconImageX = iconX - iconImageSize / 2;
+        const iconImageY = iconY - iconImageSize / 2;
+
+        doc.image(iconBuffer, iconImageX, iconImageY, {
+          width: iconImageSize,
+          height: iconImageSize,
+        });
+      } catch (error) {
+        console.warn("Could not load transport mode icon:", error);
+        // Fallback to simple circle with text
+        doc
+          .lineWidth(3)
+          .circle(iconX, iconY, iconSize / 2)
+          .stroke(white);
+
+        // Add fallback icon text
+        doc
+          .fillColor(white)
+          .fontSize(20)
+          .font("Helvetica-Bold")
+          .text("x", iconX - 10, iconY - 10);
+      }
 
       // Add stop name in header
       const stopName = stopPlaceInfo?.name || id;
@@ -133,7 +205,7 @@ async function generateSinglePdf(
         .fillColor(white)
         .fontSize(36)
         .font("Helvetica-Bold")
-        .text(stopName, 150, 40, {
+        .text(stopName, 130, 45, {
           width: pageWidth - 200,
           align: "left",
         });
@@ -269,22 +341,57 @@ async function generateSinglePdf(
         .font("Helvetica-Bold")
         .text("frammr.no", rightColumnX + 130, rightColumnStartY + 125);
 
-      // Footer with FRAM logo area
+      // Footer with FRAM logo area - clipped to border box
       const footerY = pageHeight - 80;
-      doc.rect(0, footerY, pageWidth, 80).fill(framBlue);
-
-      // FRAM logo text (simplified)
+      const footerHeight = 80;
       doc
-        .fillColor(white)
-        .fontSize(24)
-        .font("Helvetica-Bold")
-        .text("FRAM", pageWidth - 150, footerY + 25);
+        .save()
+        .roundedRect(
+          borderMargin,
+          borderMargin,
+          boxWidth,
+          boxHeight,
+          borderRadius
+        )
+        .clip()
+        .rect(borderMargin, footerY, boxWidth, footerHeight)
+        .fill(framBlue)
+        .restore();
 
-      doc
-        .fillColor(white)
-        .fontSize(10)
-        .font("Helvetica")
-        .text("Møre og Romsdal fylkeskommune", pageWidth - 220, footerY + 55);
+      // Add FRAM logo in lower right corner
+      try {
+        const logoPath = join(
+          process.cwd(),
+          "images",
+          "fram_mor_fylkeskommune_dark.png"
+        );
+        const logoBuffer = await fs.readFile(logoPath);
+
+        // Position logo in lower right corner of footer with some margin
+        const logoWidth = 105; // Adjust size as needed
+        const logoHeight = 28; // Maintain aspect ratio (180:48 = 3.75:1)
+        const logoX = pageWidth - borderMargin - logoWidth - 20; // 10px margin from right edge
+        const logoY = footerY + footerHeight - logoHeight - 35; // 10px margin from bottom
+
+        doc.image(logoBuffer, logoX, logoY, {
+          width: logoWidth,
+          height: logoHeight,
+        });
+      } catch (error) {
+        console.warn("Could not load FRAM logo PNG:", error);
+        // Fallback to text logo if PNG fails to load
+        doc
+          .fillColor(white)
+          .fontSize(24)
+          .font("Helvetica-Bold")
+          .text("FRAM", pageWidth - 150, footerY + 25);
+
+        doc
+          .fillColor(white)
+          .fontSize(10)
+          .font("Helvetica")
+          .text("Møre og Romsdal fylkeskommune", pageWidth - 220, footerY + 55);
+      }
 
       // Finalize the PDF
       doc.end();
