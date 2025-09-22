@@ -14,6 +14,7 @@ import {
   generatePdfsForIds,
   PdfGenerationOptions,
   PdfGenerationResult,
+  PdfStyleConfig,
 } from "./utils/pdfGenerator";
 
 /**
@@ -26,6 +27,8 @@ export interface ProcessFileOptions {
   outputDirectory: string;
   /** PDF format (defaults to A4) */
   format?: "A4" | "A3" | "Letter";
+  /** Style configuration for PDF appearance */
+  style?: PdfStyleConfig;
 }
 
 /**
@@ -50,6 +53,8 @@ export interface GenerateSinglePdfOptions {
   outputDirectory: string;
   /** PDF format (defaults to A4) */
   format?: "A4" | "A3" | "Letter";
+  /** Style configuration for PDF appearance */
+  style?: PdfStyleConfig;
 }
 
 /**
@@ -86,7 +91,7 @@ export class NsrBarcodeApi {
   static async processFile(
     options: ProcessFileOptions
   ): Promise<ProcessFileResult> {
-    const { filePath, outputDirectory, format } = options;
+    const { filePath, outputDirectory, format, style } = options;
 
     try {
       // Read and parse the file
@@ -98,6 +103,9 @@ export class NsrBarcodeApi {
       const pdfOptions: PdfGenerationOptions = { outputDirectory };
       if (format) {
         pdfOptions.format = format;
+      }
+      if (style) {
+        pdfOptions.style = style;
       }
       const pdfResult = await generatePdfsForIds(uniqueIdsArray, pdfOptions);
 
@@ -127,7 +135,7 @@ export class NsrBarcodeApi {
   static async generateSinglePdf(
     options: GenerateSinglePdfOptions
   ): Promise<GenerateSinglePdfResult> {
-    const { nsrId, outputDirectory, format } = options;
+    const { nsrId, outputDirectory, format, style } = options;
 
     try {
       // Validate the NSR ID format
@@ -140,6 +148,9 @@ export class NsrBarcodeApi {
       const pdfOptions: PdfGenerationOptions = { outputDirectory };
       if (format) {
         pdfOptions.format = format;
+      }
+      if (style) {
+        pdfOptions.style = style;
       }
       const pdfResult = await generatePdfsForIds([nsrId], pdfOptions);
 
@@ -169,9 +180,7 @@ export class NsrBarcodeApi {
    */
   static async generateMultiplePdfs(
     nsrIds: string[],
-    options: Omit<PdfGenerationOptions, "format"> & {
-      format?: "A4" | "A3" | "Letter";
-    }
+    options: PdfGenerationOptions
   ): Promise<PdfGenerationResult> {
     // Validate all NSR IDs
     for (const nsrId of nsrIds) {
@@ -249,6 +258,7 @@ export {
   IdParseError,
   PdfGenerationOptions,
   PdfGenerationResult,
+  PdfStyleConfig,
   formatIdCountResult,
 };
 

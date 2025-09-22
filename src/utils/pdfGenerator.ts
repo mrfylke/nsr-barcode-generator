@@ -5,9 +5,24 @@ import { createWriteStream } from "fs";
 import * as QRCode from "qrcode";
 import { enturApi, StopPlaceInfo } from "./enturApi";
 
+export interface PdfStyleConfig {
+  /** Color for header and footer background (hex color) */
+  headerFooterColor?: string;
+  /** Path to logo image file for lower right corner */
+  logoPath?: string;
+  /** Logo width in pixels (height will be calculated to maintain aspect ratio) */
+  logoWidth?: number;
+  /** Fallback text to display if logo cannot be loaded */
+  fallbackLogoText?: string;
+  /** Additional fallback text (subtitle) */
+  fallbackLogoSubtext?: string;
+}
+
 export interface PdfGenerationOptions {
   outputDirectory: string;
   format?: "A4" | "A3" | "Letter";
+  /** Style configuration for PDF appearance */
+  style?: PdfStyleConfig;
 }
 
 export interface PdfGenerationResult {
@@ -44,12 +59,12 @@ export async function generatePdfsForIds(
     if (!id) continue; // Skip if ID is undefined
 
     try {
-      // Generate safe filename from ID
-      const filename = generateSafeFilename(id);
+      // Generate safe filename from ID and stop place name
+      const filename = generateSafeFilename(id, stopPlaceInfo?.name);
       const outputPath = join(outputDirectory, `${filename}.pdf`);
 
       // Generate PDF with stop place information
-      await generateSinglePdf(id, outputPath, stopPlaceInfo);
+      await generateSinglePdf(id, outputPath, stopPlaceInfo, options);
       generatedFiles.push(outputPath);
 
       const infoText = stopPlaceInfo?.name ? ` (${stopPlaceInfo.name})` : "";
@@ -72,11 +87,13 @@ export async function generatePdfsForIds(
  * @param id - The ID to display
  * @param outputPath - Output file path
  * @param stopPlaceInfo - Optional stop place information from Entur API
+ * @param options - PDF generation options including style configuration
  */
 async function generateSinglePdf(
   id: string,
   outputPath: string,
-  stopPlaceInfo?: StopPlaceInfo | null
+  stopPlaceInfo?: StopPlaceInfo | null,
+  options?: PdfGenerationOptions
 ): Promise<void> {
   return new Promise(async (resolve, reject) => {
     try {
@@ -100,8 +117,18 @@ async function generateSinglePdf(
       const pageWidth = doc.page.width;
       const pageHeight = doc.page.height;
 
-      // Define colors matching the FRAM design
-      const framBlue = "#1A4D75";
+      // Get style configuration with defaults
+      const styleConfig = options?.style || {};
+      const headerFooterColor = styleConfig.headerFooterColor || "#1A4D75"; // Default FRAM blue
+      const logoPath =
+        styleConfig.logoPath ||
+        join(process.cwd(), "images", "fram_mor_fylkeskommune_dark.png");
+      const logoWidth = styleConfig.logoWidth || 105;
+      const fallbackLogoText = styleConfig.fallbackLogoText || "FRAM";
+      const fallbackLogoSubtext =
+        styleConfig.fallbackLogoSubtext || "Møre og Romsdal fylkeskommune";
+
+      // Define colors
       const white = "#FFFFFF";
       const lightGray = "#F5F5F5";
       const darkGray = "#333333";
@@ -136,7 +163,7 @@ async function generateSinglePdf(
         )
         .clip()
         .rect(borderMargin, borderMargin, boxWidth, headerHeight)
-        .fill(framBlue)
+        .fill(headerFooterColor)
         .restore();
 
       // Add transport mode specific icon
@@ -357,42 +384,38 @@ async function generateSinglePdf(
         )
         .clip()
         .rect(borderMargin, footerY, boxWidth, footerHeight)
-        .fill(framBlue)
+        .fill(headerFooterColor)
         .restore();
 
-      // Add FRAM logo in lower right corner
+      // Add logo in lower right corner
       try {
-        const logoPath = join(
-          process.cwd(),
-          "images",
-          "fram_mor_fylkeskommune_dark.png"
-        );
         const logoBuffer = await fs.readFile(logoPath);
 
         // Position logo in lower right corner of footer with some margin
-        const logoWidth = 105; // Adjust size as needed
-        const logoHeight = 28; // Maintain aspect ratio (180:48 = 3.75:1)
-        const logoX = pageWidth - borderMargin - logoWidth - 20; // 10px margin from right edge
-        const logoY = footerY + footerHeight - logoHeight - 35; // 10px margin from bottom
+        const logoHeight = Math.round(logoWidth * 0.27); // Maintain aspect ratio (approximately 3.75:1)
+        const logoX = pageWidth - borderMargin - logoWidth - 20; // 20px margin from right edge
+        const logoY = footerY + footerHeight - logoHeight - 35; // 35px margin from bottom
 
         doc.image(logoBuffer, logoX, logoY, {
           width: logoWidth,
           height: logoHeight,
         });
       } catch (error) {
-        console.warn("Could not load FRAM logo PNG:", error);
-        // Fallback to text logo if PNG fails to load
+        console.warn("Could not load logo image:", error);
+        // Fallback to text logo if image fails to load
         doc
           .fillColor(white)
           .fontSize(24)
           .font("Helvetica-Bold")
-          .text("FRAM", pageWidth - 150, footerY + 25);
+          .text(fallbackLogoText, pageWidth - 150, footerY + 25);
 
-        doc
-          .fillColor(white)
-          .fontSize(10)
-          .font("Helvetica")
-          .text("Møre og Romsdal fylkeskommune", pageWidth - 220, footerY + 55);
+        if (fallbackLogoSubtext) {
+          doc
+            .fillColor(white)
+            .fontSize(10)
+            .font("Helvetica")
+            .text(fallbackLogoSubtext, pageWidth - 220, footerY + 55);
+        }
       }
 
       // Finalize the PDF
@@ -418,13 +441,56 @@ async function generateSinglePdf(
 }
 
 /**
- * Generates a safe filename from an ID
- * @param id - The ID to convert to filename
+ * Slugifies a string to be safe for filenames
+ * @param text - The text to slugify
+ * @returns Slugified string safe for filenames
+ */
+function slugify(text: string): string {
+  return (
+    text
+      .toLowerCase()
+      .trim()
+      // Replace Norwegian characters
+      .replace(/[æÆ]/g, "ae")
+      .replace(/[øØ]/g, "o")
+      .replace(/[åÅ]/g, "aa")
+      // Replace other accented characters
+      .replace(/[àáâãäå]/g, "a")
+      .replace(/[èéêë]/g, "e")
+      .replace(/[ìíîï]/g, "i")
+      .replace(/[òóôõö]/g, "o")
+      .replace(/[ùúûü]/g, "u")
+      .replace(/[ñ]/g, "n")
+      .replace(/[ç]/g, "c")
+      // Replace spaces and special characters with hyphens
+      .replace(/[\s\W-]+/g, "-")
+      // Remove leading/trailing hyphens
+      .replace(/^-+|-+$/g, "")
+      // Limit length to reasonable filename size
+      .substring(0, 50)
+  );
+}
+
+/**
+ * Generates a safe filename from an ID and optional stop place name
+ * @param id - The NSR ID to convert to filename
+ * @param stopPlaceName - Optional stop place name to include in filename
  * @returns Safe filename string
  */
-function generateSafeFilename(id: string): string {
-  // Replace unsafe characters with underscores
-  return id.replace(/[^a-zA-Z0-9\-_]/g, "_");
+function generateSafeFilename(id: string, stopPlaceName?: string): string {
+  // Always start with the ID (made safe for filenames)
+  const safeId = id.replace(/[^a-zA-Z0-9\-_]/g, "_");
+
+  // If we have a stop place name, add it as a suffix
+  if (stopPlaceName && stopPlaceName.trim()) {
+    const slugifiedName = slugify(stopPlaceName);
+    if (slugifiedName) {
+      return `${safeId}-${slugifiedName}`;
+    }
+  }
+
+  // Fallback to just the ID if no name or slugification failed
+  return safeId;
 }
 
 /**

@@ -6,7 +6,7 @@
  */
 
 import { Command } from "commander";
-import { NsrBarcodeApi, IdParseError } from "./api";
+import { NsrBarcodeApi, IdParseError, PdfStyleConfig } from "./api";
 import { version } from "../package.json";
 
 const program = new Command();
@@ -24,9 +24,31 @@ program
     "output directory for generated PDFs"
   )
   .option("-f, --format <format>", "PDF format (A4, A3, Letter)", "A4")
+  .option(
+    "--header-color <color>",
+    "Header and footer background color (hex format, e.g., #1A4D75)"
+  )
+  .option(
+    "--logo-path <path>",
+    "Path to logo image file for lower right corner"
+  )
+  .option("--logo-width <width>", "Logo width in pixels", parseInt)
+  .option("--fallback-text <text>", "Fallback text if logo cannot be loaded")
+  .option("--fallback-subtext <text>", "Additional fallback text (subtitle)")
   .description("Generate PDF files for unique IDs from an input file")
   .action(
-    async (filePath: string, options: { output: string; format?: string }) => {
+    async (
+      filePath: string,
+      options: {
+        output: string;
+        format?: string;
+        headerColor?: string;
+        logoPath?: string;
+        logoWidth?: number;
+        fallbackText?: string;
+        fallbackSubtext?: string;
+      }
+    ) => {
       try {
         // Validate format option
         const format = options.format as "A4" | "A3" | "Letter" | undefined;
@@ -43,6 +65,24 @@ program
           console.log(`PDF format: ${format}`);
         }
 
+        // Build style configuration
+        const styleConfig: PdfStyleConfig = {};
+        if (options.headerColor) {
+          styleConfig.headerFooterColor = options.headerColor;
+        }
+        if (options.logoPath) {
+          styleConfig.logoPath = options.logoPath;
+        }
+        if (options.logoWidth) {
+          styleConfig.logoWidth = options.logoWidth;
+        }
+        if (options.fallbackText) {
+          styleConfig.fallbackLogoText = options.fallbackText;
+        }
+        if (options.fallbackSubtext) {
+          styleConfig.fallbackLogoSubtext = options.fallbackSubtext;
+        }
+
         const processOptions: Parameters<typeof NsrBarcodeApi.processFile>[0] =
           {
             filePath,
@@ -50,6 +90,9 @@ program
           };
         if (format && format !== "A4") {
           processOptions.format = format;
+        }
+        if (Object.keys(styleConfig).length > 0) {
+          processOptions.style = styleConfig;
         }
 
         const result = await NsrBarcodeApi.processFile(processOptions);
@@ -77,9 +120,31 @@ program
     "output directory for generated PDF"
   )
   .option("-f, --format <format>", "PDF format (A4, A3, Letter)", "A4")
+  .option(
+    "--header-color <color>",
+    "Header and footer background color (hex format, e.g., #1A4D75)"
+  )
+  .option(
+    "--logo-path <path>",
+    "Path to logo image file for lower right corner"
+  )
+  .option("--logo-width <width>", "Logo width in pixels", parseInt)
+  .option("--fallback-text <text>", "Fallback text if logo cannot be loaded")
+  .option("--fallback-subtext <text>", "Additional fallback text (subtitle)")
   .description("Generate PDF for a single NSR ID")
   .action(
-    async (nsrId: string, options: { output: string; format?: string }) => {
+    async (
+      nsrId: string,
+      options: {
+        output: string;
+        format?: string;
+        headerColor?: string;
+        logoPath?: string;
+        logoWidth?: number;
+        fallbackText?: string;
+        fallbackSubtext?: string;
+      }
+    ) => {
       try {
         // Validate format option
         const format = options.format as "A4" | "A3" | "Letter" | undefined;
@@ -96,6 +161,24 @@ program
           console.log(`PDF format: ${format}`);
         }
 
+        // Build style configuration
+        const styleConfig: PdfStyleConfig = {};
+        if (options.headerColor) {
+          styleConfig.headerFooterColor = options.headerColor;
+        }
+        if (options.logoPath) {
+          styleConfig.logoPath = options.logoPath;
+        }
+        if (options.logoWidth) {
+          styleConfig.logoWidth = options.logoWidth;
+        }
+        if (options.fallbackText) {
+          styleConfig.fallbackLogoText = options.fallbackText;
+        }
+        if (options.fallbackSubtext) {
+          styleConfig.fallbackLogoSubtext = options.fallbackSubtext;
+        }
+
         const generateOptions: Parameters<
           typeof NsrBarcodeApi.generateSinglePdf
         >[0] = {
@@ -104,6 +187,9 @@ program
         };
         if (format && format !== "A4") {
           generateOptions.format = format;
+        }
+        if (Object.keys(styleConfig).length > 0) {
+          generateOptions.style = styleConfig;
         }
 
         const result = await NsrBarcodeApi.generateSinglePdf(generateOptions);
