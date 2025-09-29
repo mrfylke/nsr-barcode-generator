@@ -244,7 +244,7 @@ export class EnturApiClient {
     } = {}
   ): Promise<(StopPlaceInfo | null)[]> {
     const {
-      batchSize = 10,
+      batchSize = 100,
       delayBetweenBatches = 1000,
       concurrency = 5,
     } = options;

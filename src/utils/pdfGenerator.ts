@@ -4,6 +4,7 @@ import { resolve, join } from "path";
 import { createWriteStream } from "fs";
 import * as QRCode from "qrcode";
 import { enturApi, StopPlaceInfo } from "./enturApi";
+import { fontLoader, FontFamily } from "./fontLoader";
 
 export interface PdfStyleConfig {
   /** Color for header and footer background (hex color) */
@@ -97,6 +98,10 @@ async function generateSinglePdf(
 ): Promise<void> {
   return new Promise(async (resolve, reject) => {
     try {
+      // Load Poppins fonts
+      console.log("Loading Poppins fonts...");
+      const fonts = await fontLoader.loadPoppins();
+
       // Create a new PDF document in landscape mode
       const doc = new PDFDocument({
         size: "A4",
@@ -108,6 +113,27 @@ async function generateSinglePdf(
           right: 50,
         },
       });
+
+      // Register Poppins fonts with PDFKit
+      let poppinsRegular = "Helvetica"; // Fallback
+      let poppinsBold = "Helvetica-Bold"; // Fallback
+
+      try {
+        if (fonts.regular !== "Helvetica") {
+          doc.registerFont("Poppins-Regular", fonts.regular);
+          poppinsRegular = "Poppins-Regular";
+        }
+        if (fonts.bold !== "Helvetica-Bold") {
+          doc.registerFont("Poppins-Bold", fonts.bold);
+          poppinsBold = "Poppins-Bold";
+        }
+        console.log("Poppins fonts registered successfully");
+      } catch (fontError) {
+        console.warn(
+          "Failed to register Poppins fonts, using fallback:",
+          fontError
+        );
+      }
 
       // Create write stream
       const stream = createWriteStream(outputPath);
@@ -222,7 +248,7 @@ async function generateSinglePdf(
         doc
           .fillColor(white)
           .fontSize(20)
-          .font("Helvetica-Bold")
+          .font(poppinsBold)
           .text("x", iconX - 10, iconY - 10);
       }
 
@@ -231,26 +257,26 @@ async function generateSinglePdf(
       doc
         .fillColor(white)
         .fontSize(36)
-        .font("Helvetica-Bold")
-        .text(stopName, 130, 45, {
+        .font(poppinsBold)
+        .text(stopName, 130, 35, {
           width: pageWidth - 200,
           align: "left",
         });
 
       // Main content area - centered vertically
       const availableHeight = pageHeight - headerHeight - 80; // 80 is footer height
-      const contentHeight = 280; // Approximate total height of all content
+      const contentHeight = 310; // Approximate total height of all content
       const contentY = headerHeight + (availableHeight - contentHeight) / 2;
 
-      // QR Code section (left side)
-      const qrX = 80;
-      const qrY = contentY;
+      // QR Code section (aligned with circular icon)
       const qrSize = 120;
+      const qrX = iconX - iconSize / 2; // Align QR code left edge with left edge of circular icon
+      const qrY = contentY;
 
       // Generate QR code
       const url = `https://reise.frammr.no/departures/${encodeURIComponent(
         id
-      )}`;
+      )}?qr`;
       const qrCodeDataURL = await QRCode.toDataURL(url, {
         width: 200,
         margin: 1,
@@ -267,68 +293,70 @@ async function generateSinglePdf(
       }
 
       // Text content (center and right)
-      const textStartX = qrX + qrSize + 50;
-      const rightColumnX = pageWidth - 320;
+      const textStartX = qrX + qrSize + 20; // Text starts after the QR code with some padding
+      const rightColumnX = pageWidth - 320; // Right column remains in the same position
 
       // Norwegian section
       doc
         .fillColor(darkGray)
         .fontSize(24)
-        .font("Helvetica-Bold")
+        .font(poppinsBold)
         .text("Når kjem bussen?", textStartX, contentY);
 
       doc
         .fillColor(darkGray)
         .fontSize(14)
-        .font("Helvetica")
+        .font(poppinsRegular)
         .text("Opne mobilkameraet ditt og hald", textStartX, contentY + 40)
         .text("kameralinsa over QR-koden. Lenka", textStartX, contentY + 60)
         .text(
-          "fører deg til Entur, og viser busslinjer og",
+          "fører deg til reiseplanleggaren, og viser",
           textStartX,
           contentY + 80
         )
         .text(
-          "avgangar frå haldeplassen du står på.",
+          "busslinjer og avgangar frå haldeplassen",
           textStartX,
           contentY + 100
-        );
+        )
+        .text("du står på.", textStartX, contentY + 120);
 
       // English section
       doc
         .fillColor(darkGray)
         .fontSize(24)
-        .font("Helvetica-Bold")
-        .text("When will the bus", textStartX, contentY + 140)
-        .text("arrive?", textStartX, contentY + 165);
+        .font(poppinsBold)
+        .text("When will the bus", textStartX, contentY + 160)
+        .text("arrive?", textStartX, contentY + 185);
 
       doc
         .fillColor(darkGray)
         .fontSize(14)
-        .font("Helvetica")
-        .text("Open your mobile camera and hold", textStartX, contentY + 200)
+        .font(poppinsRegular)
+        .text("Open your mobile camera and hold", textStartX, contentY + 220)
         .text(
           "camera lens over the QR code. The link",
-          textStartX,
-          contentY + 220
-        )
-        .text(
-          "takes you to Entur, and shows bus lines",
           textStartX,
           contentY + 240
         )
         .text(
-          "and departures from the stop you are at.",
+          "takes you to the travel planner, and",
           textStartX,
           contentY + 260
-        );
+        )
+        .text(
+          "shows bus lines and departures from the",
+          textStartX,
+          contentY + 280
+        )
+        .text("stop you are at.", textStartX, contentY + 300);
 
       // Add vertical line separating center and right columns
-      const separatorX = rightColumnX - 12;
+      const separatorX = rightColumnX - 22;
       doc
         .lineWidth(0.25)
         .moveTo(separatorX, contentY)
-        .lineTo(separatorX, contentY + 280)
+        .lineTo(separatorX, contentY + 320)
         .stroke("#000000");
 
       // Right column - Additional info (aligned with "Opne mobilkameraet ditt ...")
@@ -336,39 +364,51 @@ async function generateSinglePdf(
 
       doc
         .fillColor(darkGray)
-        .fontSize(16)
-        .font("Helvetica-Bold")
+        .fontSize(14)
+        .font(poppinsBold)
         .text("Informasjon om bussavgangar", rightColumnX, rightColumnStartY)
-        .text("finn du også på:", rightColumnX, rightColumnStartY + 20);
+        .text("finn du også:", rightColumnX, rightColumnStartY + 20);
 
       doc
         .fillColor(darkGray)
-        .fontSize(16)
-        .font("Helvetica")
+        .fontSize(14)
+        .font(poppinsRegular)
         .text(
           "Information about bus departures",
           rightColumnX,
           rightColumnStartY + 40
         )
-        .text("can also be found at:", rightColumnX, rightColumnStartY + 60);
+        .text("can also be found:", rightColumnX, rightColumnStartY + 60);
 
       doc
         .fillColor(darkGray)
         .fontSize(14)
-        .font("Helvetica")
-        .text("• App / app: ", rightColumnX, rightColumnStartY + 100);
+        .font(poppinsRegular)
+        .text(
+          "• I appane / in the apps:",
+          rightColumnX,
+          rightColumnStartY + 100
+        );
 
       doc
-        .font("Helvetica-Bold")
-        .text("FRAM / Entur", rightColumnX + 80, rightColumnStartY + 100);
+        .font(poppinsBold)
+        .text("FRAM / Entur", rightColumnX + 10, rightColumnStartY + 120);
 
       doc
-        .font("Helvetica")
-        .text("• Nettside / website: ", rightColumnX, rightColumnStartY + 125);
+        .font(poppinsRegular)
+        .text(
+          "• På nettsidene / on the websites:",
+          rightColumnX,
+          rightColumnStartY + 155
+        );
 
       doc
-        .font("Helvetica-Bold")
-        .text("frammr.no", rightColumnX + 130, rightColumnStartY + 125);
+        .font(poppinsBold)
+        .text(
+          "frammr.no / entur.no",
+          rightColumnX + 10,
+          rightColumnStartY + 175
+        );
 
       // Footer with FRAM logo area - clipped to border box
       const footerY = pageHeight - 80;
@@ -406,14 +446,14 @@ async function generateSinglePdf(
         doc
           .fillColor(white)
           .fontSize(24)
-          .font("Helvetica-Bold")
+          .font(poppinsBold)
           .text(fallbackLogoText, pageWidth - 150, footerY + 25);
 
         if (fallbackLogoSubtext) {
           doc
             .fillColor(white)
             .fontSize(10)
-            .font("Helvetica")
+            .font(poppinsRegular)
             .text(fallbackLogoSubtext, pageWidth - 220, footerY + 55);
         }
       }

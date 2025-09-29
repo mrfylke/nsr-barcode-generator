@@ -218,7 +218,6 @@ NSR:StopPlace:40944
 NSR:StopPlace:39640
 NSR:StopPlace:59727
 NSR:StopPlace:59801
- ID-huset
 NSR:StopPlace:39992
 NSR:StopPlace:41286
 NSR:StopPlace:40647
@@ -356,7 +355,6 @@ NSR:StopPlace:37854
 NSR:StopPlace:38240
 NSR:StopPlace:39475
 NSR:StopPlace:40558
- sparebanken
 NSR:StopPlace:38840
 NSR:StopPlace:40455
 NSR:StopPlace:38253
