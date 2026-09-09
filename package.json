@@ -1,5 +1,5 @@
 {
-  "name": "nsr-barcode-generator",
+  "name": "@mrfylke/nsr-barcode-generator",
   "version": "1.0.0",
   "description": "A CLI tool and programmatic API to generate PDF files for unique NSR IDs",
   "main": "dist/index.js",
