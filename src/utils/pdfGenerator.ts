@@ -22,6 +22,8 @@ export interface PdfStyleConfig {
 export interface PdfGenerationOptions {
   outputDirectory: string;
   format?: "A4" | "A3" | "Letter";
+  /** PDF orientation (defaults to landscape) */
+  orientation?: "landscape" | "portrait";
   /** Style configuration for PDF appearance */
   style?: PdfStyleConfig;
 }
@@ -102,10 +104,13 @@ async function generateSinglePdf(
       console.log("Loading Poppins fonts...");
       const fonts = await fontLoader.loadPoppins();
 
-      // Create a new PDF document in landscape mode
+      // Get orientation (default to landscape for backward compatibility)
+      const orientation = options?.orientation || "landscape";
+
+      // Create a new PDF document with specified orientation
       const doc = new PDFDocument({
         size: "A4",
-        layout: "landscape",
+        layout: orientation,
         margins: {
           top: 50,
           bottom: 50,
@@ -263,17 +268,13 @@ async function generateSinglePdf(
           align: "left",
         });
 
-      // Main content area - centered vertically
-      const availableHeight = pageHeight - headerHeight - 80; // 80 is footer height
-      const contentHeight = 310; // Approximate total height of all content
+      // Main content area - centered vertically (adjust for orientation)
+      const footerHeight = 80;
+      const availableHeight = pageHeight - headerHeight - footerHeight;
+      const contentHeight = orientation === "portrait" ? 400 : 310; // More vertical space needed for portrait
       const contentY = headerHeight + (availableHeight - contentHeight) / 2;
 
-      // QR Code section (aligned with circular icon)
-      const qrSize = 120;
-      const qrX = iconX - iconSize / 2; // Align QR code left edge with left edge of circular icon
-      const qrY = contentY;
-
-      // Generate QR code
+      // Generate QR code first (used in both layouts)
       const url = `https://reise.frammr.no/departures/${encodeURIComponent(
         id
       )}?qr`;
@@ -287,132 +288,267 @@ async function generateSinglePdf(
       });
 
       const base64Data = qrCodeDataURL.split(",")[1];
+      let qrCodeBuffer: Buffer | null = null;
       if (base64Data) {
-        const qrCodeBuffer = Buffer.from(base64Data, "base64");
-        doc.image(qrCodeBuffer, qrX, qrY, { width: qrSize, height: qrSize });
+        qrCodeBuffer = Buffer.from(base64Data, "base64");
       }
 
-      // Text content (center and right)
-      const textStartX = qrX + qrSize + 20; // Text starts after the QR code with some padding
-      const rightColumnX = pageWidth - 320; // Right column remains in the same position
+      if (orientation === "portrait") {
+        // Portrait layout: QR code in left column, right column text from landscape
+        const qrSize = 120;
+        const topMargin = headerHeight + 20; // Right under header with small margin
+        const qrX = iconX - iconSize / 2; // Same X position as landscape QR code
+        const qrY = topMargin; // Move to top under header
 
-      // Norwegian section
-      doc
-        .fillColor(darkGray)
-        .fontSize(24)
-        .font(poppinsBold)
-        .text("Når kjem bussen?", textStartX, contentY);
+        // Add QR code on the left
+        if (qrCodeBuffer) {
+          doc.image(qrCodeBuffer, qrX, qrY, { width: qrSize, height: qrSize });
+        }
 
-      doc
-        .fillColor(darkGray)
-        .fontSize(14)
-        .font(poppinsRegular)
-        .text("Opne mobilkameraet ditt og hald", textStartX, contentY + 40)
-        .text("kameralinsa over QR-koden. Lenka", textStartX, contentY + 60)
-        .text(
-          "fører deg til reiseplanleggaren, og viser",
-          textStartX,
-          contentY + 80
-        )
-        .text(
-          "busslinjer og avgangar frå haldeplassen",
-          textStartX,
-          contentY + 100
-        )
-        .text("du står på.", textStartX, contentY + 120);
+        // Right column text - exactly the same as landscape right column
+        const rightColumnX = pageWidth - 350; // Increased width by 30 points
+        const rightColumnStartY = topMargin; // Same Y position as QR code, under header
 
-      // English section
-      doc
-        .fillColor(darkGray)
-        .fontSize(24)
-        .font(poppinsBold)
-        .text("When will the bus", textStartX, contentY + 160)
-        .text("arrive?", textStartX, contentY + 185);
+        // Norwegian section (from landscape middle column)
+        doc
+          .fillColor(darkGray)
+          .fontSize(24)
+          .font(poppinsBold)
+          .text("Når kjem bussen?", rightColumnX, rightColumnStartY);
 
-      doc
-        .fillColor(darkGray)
-        .fontSize(14)
-        .font(poppinsRegular)
-        .text("Open your mobile camera and hold", textStartX, contentY + 220)
-        .text(
-          "camera lens over the QR code. The link",
-          textStartX,
-          contentY + 240
-        )
-        .text(
-          "takes you to the travel planner, and",
-          textStartX,
-          contentY + 260
-        )
-        .text(
-          "shows bus lines and departures from the",
-          textStartX,
-          contentY + 280
-        )
-        .text("stop you are at.", textStartX, contentY + 300);
+        doc
+          .fillColor(darkGray)
+          .fontSize(14)
+          .font(poppinsRegular)
+          .text(
+            "Opne mobilkameraet ditt og hald",
+            rightColumnX,
+            rightColumnStartY + 40
+          )
+          .text(
+            "kameralinsa over QR-koden. Lenka",
+            rightColumnX,
+            rightColumnStartY + 60
+          )
+          .text(
+            "fører deg til reiseplanleggaren, og viser",
+            rightColumnX,
+            rightColumnStartY + 80
+          )
+          .text(
+            "busslinjer og avgangar frå haldeplassen",
+            rightColumnX,
+            rightColumnStartY + 100
+          )
+          .text("du står på.", rightColumnX, rightColumnStartY + 120);
 
-      // Add vertical line separating center and right columns
-      const separatorX = rightColumnX - 22;
-      doc
-        .lineWidth(0.25)
-        .moveTo(separatorX, contentY)
-        .lineTo(separatorX, contentY + 320)
-        .stroke("#000000");
+        // English section (moved to be right after Norwegian section)
+        const englishStartY = rightColumnStartY + 160;
+        doc
+          .fillColor(darkGray)
+          .fontSize(24)
+          .font(poppinsBold)
+          .text("When will the bus", rightColumnX, englishStartY)
+          .text("arrive?", rightColumnX, englishStartY + 25);
 
-      // Right column - Additional info (aligned with "Opne mobilkameraet ditt ...")
-      const rightColumnStartY = contentY + 40;
+        doc
+          .fillColor(darkGray)
+          .fontSize(14)
+          .font(poppinsRegular)
+          .text(
+            "Open your mobile camera and hold",
+            rightColumnX,
+            englishStartY + 60
+          )
+          .text(
+            "camera lens over the QR code. The link",
+            rightColumnX,
+            englishStartY + 80
+          )
+          .text(
+            "takes you to the travel planner, and",
+            rightColumnX,
+            englishStartY + 100
+          )
+          .text(
+            "shows bus lines and departures from the",
+            rightColumnX,
+            englishStartY + 120
+          )
+          .text("stop you are at.", rightColumnX, englishStartY + 140);
 
-      doc
-        .fillColor(darkGray)
-        .fontSize(14)
-        .font(poppinsBold)
-        .text("Informasjon om bussavgangar", rightColumnX, rightColumnStartY)
-        .text("finn du også:", rightColumnX, rightColumnStartY + 20);
+        // Info section (moved to be at the end)
+        const infoStartY = englishStartY + 180;
+        doc
+          .fillColor(darkGray)
+          .fontSize(14)
+          .font(poppinsBold)
+          .text("Informasjon om bussavgangar", rightColumnX, infoStartY)
+          .text("finn du också:", rightColumnX, infoStartY + 20);
 
-      doc
-        .fillColor(darkGray)
-        .fontSize(14)
-        .font(poppinsRegular)
-        .text(
-          "Information about bus departures",
-          rightColumnX,
-          rightColumnStartY + 40
-        )
-        .text("can also be found:", rightColumnX, rightColumnStartY + 60);
+        doc
+          .fillColor(darkGray)
+          .fontSize(14)
+          .font(poppinsRegular)
+          .text(
+            "Information about bus departures",
+            rightColumnX,
+            infoStartY + 40
+          )
+          .text("can also be found:", rightColumnX, infoStartY + 60);
 
-      doc
-        .fillColor(darkGray)
-        .fontSize(14)
-        .font(poppinsRegular)
-        .text(
-          "• I appane / in the apps:",
-          rightColumnX,
-          rightColumnStartY + 100
-        );
+        doc
+          .fillColor(darkGray)
+          .fontSize(14)
+          .font(poppinsRegular)
+          .text("• I appane / in the apps:", rightColumnX, infoStartY + 100);
 
-      doc
-        .font(poppinsBold)
-        .text("FRAM / Entur", rightColumnX + 10, rightColumnStartY + 120);
+        doc
+          .font(poppinsBold)
+          .text("FRAM / Entur", rightColumnX + 10, infoStartY + 120);
 
-      doc
-        .font(poppinsRegular)
-        .text(
-          "• På nettsidene / on the websites:",
-          rightColumnX,
-          rightColumnStartY + 155
-        );
+        doc
+          .font(poppinsRegular)
+          .text(
+            "• På nettsidene / on the websites:",
+            rightColumnX,
+            infoStartY + 155
+          );
 
-      doc
-        .font(poppinsBold)
-        .text(
-          "frammr.no / entur.no",
-          rightColumnX + 10,
-          rightColumnStartY + 175
-        );
+        doc
+          .font(poppinsBold)
+          .text("frammr.no / entur.no", rightColumnX + 10, infoStartY + 175);
+      } else {
+        const qrSize = 120;
+        const qrX = iconX - iconSize / 2; // Align QR code left edge with left edge of circular icon
+        const qrY = contentY;
+
+        // Add QR code
+        if (qrCodeBuffer) {
+          doc.image(qrCodeBuffer, qrX, qrY, { width: qrSize, height: qrSize });
+        }
+
+        // Text content (center and right)
+        const textStartX = qrX + qrSize + 20; // Text starts after the QR code with some padding
+        const rightColumnX = pageWidth - 320; // Right column remains in the same position
+
+        // Norwegian section
+        doc
+          .fillColor(darkGray)
+          .fontSize(24)
+          .font(poppinsBold)
+          .text("Når kjem bussen?", textStartX, contentY);
+
+        doc
+          .fillColor(darkGray)
+          .fontSize(14)
+          .font(poppinsRegular)
+          .text("Opne mobilkameraet ditt og hald", textStartX, contentY + 40)
+          .text("kameralinsa over QR-koden. Lenka", textStartX, contentY + 60)
+          .text(
+            "fører deg til reiseplanleggaren, og viser",
+            textStartX,
+            contentY + 80
+          )
+          .text(
+            "busslinjer og avgangar frå haldeplassen",
+            textStartX,
+            contentY + 100
+          )
+          .text("du står på.", textStartX, contentY + 120);
+
+        // English section
+        doc
+          .fillColor(darkGray)
+          .fontSize(24)
+          .font(poppinsBold)
+          .text("When will the bus", textStartX, contentY + 160)
+          .text("arrive?", textStartX, contentY + 185);
+
+        doc
+          .fillColor(darkGray)
+          .fontSize(14)
+          .font(poppinsRegular)
+          .text("Open your mobile camera and hold", textStartX, contentY + 220)
+          .text(
+            "camera lens over the QR code. The link",
+            textStartX,
+            contentY + 240
+          )
+          .text(
+            "takes you to the travel planner, and",
+            textStartX,
+            contentY + 260
+          )
+          .text(
+            "shows bus lines and departures from the",
+            textStartX,
+            contentY + 280
+          )
+          .text("stop you are at.", textStartX, contentY + 300);
+
+        // Add vertical line separating center and right columns
+        const separatorX = rightColumnX - 22;
+        doc
+          .lineWidth(0.25)
+          .moveTo(separatorX, contentY)
+          .lineTo(separatorX, contentY + 320)
+          .stroke("#000000");
+
+        // Right column - Additional info (aligned with "Opne mobilkameraet ditt ...")
+        const rightColumnStartY = contentY + 40;
+
+        doc
+          .fillColor(darkGray)
+          .fontSize(14)
+          .font(poppinsBold)
+          .text("Informasjon om bussavgangar", rightColumnX, rightColumnStartY)
+          .text("finn du også:", rightColumnX, rightColumnStartY + 20);
+
+        doc
+          .fillColor(darkGray)
+          .fontSize(14)
+          .font(poppinsRegular)
+          .text(
+            "Information about bus departures",
+            rightColumnX,
+            rightColumnStartY + 40
+          )
+          .text("can also be found:", rightColumnX, rightColumnStartY + 60);
+
+        doc
+          .fillColor(darkGray)
+          .fontSize(14)
+          .font(poppinsRegular)
+          .text(
+            "• I appane / in the apps:",
+            rightColumnX,
+            rightColumnStartY + 100
+          );
+
+        doc
+          .font(poppinsBold)
+          .text("FRAM / Entur", rightColumnX + 10, rightColumnStartY + 120);
+
+        doc
+          .font(poppinsRegular)
+          .text(
+            "• På nettsidene / on the websites:",
+            rightColumnX,
+            rightColumnStartY + 155
+          );
+
+        doc
+          .font(poppinsBold)
+          .text(
+            "frammr.no / entur.no",
+            rightColumnX + 10,
+            rightColumnStartY + 175
+          );
+      }
 
       // Footer with FRAM logo area - clipped to border box
-      const footerY = pageHeight - 80;
-      const footerHeight = 80;
+      const footerY = pageHeight - footerHeight;
       doc
         .save()
         .roundedRect(

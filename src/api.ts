@@ -27,6 +27,8 @@ export interface ProcessFileOptions {
   outputDirectory: string;
   /** PDF format (defaults to A4) */
   format?: "A4" | "A3" | "Letter";
+  /** PDF orientation (defaults to landscape) */
+  orientation?: "landscape" | "portrait";
   /** Style configuration for PDF appearance */
   style?: PdfStyleConfig;
 }
@@ -53,6 +55,8 @@ export interface GenerateSinglePdfOptions {
   outputDirectory: string;
   /** PDF format (defaults to A4) */
   format?: "A4" | "A3" | "Letter";
+  /** PDF orientation (defaults to landscape) */
+  orientation?: "landscape" | "portrait";
   /** Style configuration for PDF appearance */
   style?: PdfStyleConfig;
 }
@@ -91,7 +95,7 @@ export class NsrBarcodeApi {
   static async processFile(
     options: ProcessFileOptions
   ): Promise<ProcessFileResult> {
-    const { filePath, outputDirectory, format, style } = options;
+    const { filePath, outputDirectory, format, orientation, style } = options;
 
     try {
       // Read and parse the file
@@ -103,6 +107,9 @@ export class NsrBarcodeApi {
       const pdfOptions: PdfGenerationOptions = { outputDirectory };
       if (format) {
         pdfOptions.format = format;
+      }
+      if (orientation) {
+        pdfOptions.orientation = orientation;
       }
       if (style) {
         pdfOptions.style = style;
@@ -135,7 +142,7 @@ export class NsrBarcodeApi {
   static async generateSinglePdf(
     options: GenerateSinglePdfOptions
   ): Promise<GenerateSinglePdfResult> {
-    const { nsrId, outputDirectory, format, style } = options;
+    const { nsrId, outputDirectory, format, orientation, style } = options;
 
     try {
       // Validate the NSR ID format
@@ -148,6 +155,9 @@ export class NsrBarcodeApi {
       const pdfOptions: PdfGenerationOptions = { outputDirectory };
       if (format) {
         pdfOptions.format = format;
+      }
+      if (orientation) {
+        pdfOptions.orientation = orientation;
       }
       if (style) {
         pdfOptions.style = style;

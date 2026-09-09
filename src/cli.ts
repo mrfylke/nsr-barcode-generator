@@ -25,6 +25,11 @@ program
   )
   .option("-f, --format <format>", "PDF format (A4, A3, Letter)", "A4")
   .option(
+    "--orientation <orientation>",
+    "PDF orientation (landscape, portrait)",
+    "landscape"
+  )
+  .option(
     "--header-color <color>",
     "Header and footer background color (hex format, e.g., #1A4D75)"
   )
@@ -42,6 +47,7 @@ program
       options: {
         output: string;
         format?: string;
+        orientation?: string;
         headerColor?: string;
         logoPath?: string;
         logoWidth?: number;
@@ -59,10 +65,25 @@ program
           process.exit(1);
         }
 
+        // Validate orientation option
+        const orientation = options.orientation as
+          | "landscape"
+          | "portrait"
+          | undefined;
+        if (orientation && !["landscape", "portrait"].includes(orientation)) {
+          console.error(
+            `Error: Invalid orientation "${orientation}". Supported orientations: landscape, portrait`
+          );
+          process.exit(1);
+        }
+
         console.log(`Processing file: ${filePath}`);
         console.log(`Output directory: ${options.output}`);
         if (format && format !== "A4") {
           console.log(`PDF format: ${format}`);
+        }
+        if (orientation && orientation !== "landscape") {
+          console.log(`PDF orientation: ${orientation}`);
         }
 
         // Build style configuration
@@ -90,6 +111,9 @@ program
           };
         if (format && format !== "A4") {
           processOptions.format = format;
+        }
+        if (orientation && orientation !== "landscape") {
+          processOptions.orientation = orientation;
         }
         if (Object.keys(styleConfig).length > 0) {
           processOptions.style = styleConfig;
@@ -121,6 +145,11 @@ program
   )
   .option("-f, --format <format>", "PDF format (A4, A3, Letter)", "A4")
   .option(
+    "--orientation <orientation>",
+    "PDF orientation (landscape, portrait)",
+    "landscape"
+  )
+  .option(
     "--header-color <color>",
     "Header and footer background color (hex format, e.g., #1A4D75)"
   )
@@ -138,6 +167,7 @@ program
       options: {
         output: string;
         format?: string;
+        orientation?: string;
         headerColor?: string;
         logoPath?: string;
         logoWidth?: number;
@@ -155,10 +185,25 @@ program
           process.exit(1);
         }
 
+        // Validate orientation option
+        const orientation = options.orientation as
+          | "landscape"
+          | "portrait"
+          | undefined;
+        if (orientation && !["landscape", "portrait"].includes(orientation)) {
+          console.error(
+            `Error: Invalid orientation "${orientation}". Supported orientations: landscape, portrait`
+          );
+          process.exit(1);
+        }
+
         console.log(`Generating PDF for ID: ${nsrId}`);
         console.log(`Output directory: ${options.output}`);
         if (format && format !== "A4") {
           console.log(`PDF format: ${format}`);
+        }
+        if (orientation && orientation !== "landscape") {
+          console.log(`PDF orientation: ${orientation}`);
         }
 
         // Build style configuration
@@ -187,6 +232,9 @@ program
         };
         if (format && format !== "A4") {
           generateOptions.format = format;
+        }
+        if (orientation && orientation !== "landscape") {
+          generateOptions.orientation = orientation;
         }
         if (Object.keys(styleConfig).length > 0) {
           generateOptions.style = styleConfig;
