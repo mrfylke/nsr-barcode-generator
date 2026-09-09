@@ -1,5 +1,5 @@
 import { promises as fs } from "fs";
-import { getAssetPath } from "./assets";
+import { resolveAssetPath } from "./assets";
 
 export interface FontFamily {
   regular: string;
@@ -18,20 +18,30 @@ const HELVETICA_FALLBACK: FontFamily = {
  * Helvetica if a bundled font file cannot be read.
  */
 export class FontLoader {
-  private cachedFontFamily: FontFamily | null = null;
+  private cachedFontFamilies = new Map<string, FontFamily>();
 
   /**
    * Loads the Poppins font family (regular and bold weights). Verifies the
    * bundled font files are readable and returns their absolute paths for
    * PDFKit to register; falls back to Helvetica otherwise.
    */
-  async loadPoppins(): Promise<FontFamily> {
-    if (this.cachedFontFamily) {
-      return this.cachedFontFamily;
+  async loadPoppins(assetsDirectory?: string): Promise<FontFamily> {
+    const cacheKey = assetsDirectory ?? "package-default";
+    const cached = this.cachedFontFamilies.get(cacheKey);
+    if (cached) {
+      return cached;
     }
 
-    const regularPath = getAssetPath("fonts", "poppins-400-normal.ttf");
-    const boldPath = getAssetPath("fonts", "poppins-700-normal.ttf");
+    const regularPath = resolveAssetPath(
+      assetsDirectory,
+      "fonts",
+      "poppins-400-normal.ttf"
+    );
+    const boldPath = resolveAssetPath(
+      assetsDirectory,
+      "fonts",
+      "poppins-700-normal.ttf"
+    );
 
     try {
       await Promise.all([fs.access(regularPath), fs.access(boldPath)]);
@@ -40,14 +50,14 @@ export class FontLoader {
         regular: regularPath,
         bold: boldPath,
       };
-      this.cachedFontFamily = fontFamily;
+      this.cachedFontFamilies.set(cacheKey, fontFamily);
       return fontFamily;
     } catch (error) {
       console.warn(
         "Failed to read bundled Poppins fonts, falling back to Helvetica:",
         error instanceof Error ? error.message : error
       );
-      this.cachedFontFamily = HELVETICA_FALLBACK;
+      this.cachedFontFamilies.set(cacheKey, HELVETICA_FALLBACK);
       return HELVETICA_FALLBACK;
     }
   }

@@ -45,6 +45,7 @@ All three generation methods share these options:
 ```typescript
 interface PdfGenerationOptions {
   outputDirectory: string;
+  assetsDirectory?: string;                       // copied package assets for bundled executables
   format?: "A4" | "A3" | "Letter";           // default "A4"
   orientation?: "landscape" | "portrait";     // default "landscape"
   style?: PdfStyleConfig;                     // colors/logo, see below
@@ -73,6 +74,11 @@ interface PdfStyleConfig {
   fallbackLogoSubtext?: string; // default "Møre og Romsdal fylkeskommune"
 }
 ```
+
+When bundling the API into an executable, copy this package's `assets/`
+directory alongside the application and pass its absolute path as
+`assetsDirectory`. This avoids build-time `__dirname` rewriting by bundlers
+such as Bun while leaving regular Node.js package resolution unchanged.
 
 `generateSinglePdf` additionally takes `nsrId: string`, plus `name?`/`transportMode?` shortcuts (see below). `processFile` takes `filePath: string` instead of a stop-place array.
 

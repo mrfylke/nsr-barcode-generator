@@ -30,6 +30,8 @@ import { isValidNsrStopPlaceId, extractStopPlaceNumber } from "./utils/nsrId";
  * output/format/orientation/style options.
  */
 interface CommonPdfOptions {
+  /** Absolute path to copied package assets for bundled executables. */
+  assetsDirectory?: string;
   /** PDF format (defaults to A4) */
   format?: "A4" | "A3" | "Letter";
   /** PDF orientation (defaults to landscape) */
@@ -128,6 +130,9 @@ function buildPdfOptions(
   options: CommonPdfOptions
 ): PdfGenerationOptions {
   const pdfOptions: PdfGenerationOptions = { outputDirectory };
+  if (options.assetsDirectory) {
+    pdfOptions.assetsDirectory = options.assetsDirectory;
+  }
   if (options.format) {
     pdfOptions.format = options.format;
   }

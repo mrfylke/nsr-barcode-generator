@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { promises as fs } from "fs";
 import os from "os";
 import path from "path";
-import { getAssetPath } from "./assets";
+import { getAssetPath, resolveAssetPath } from "./assets";
 
 describe("getAssetPath", () => {
   const originalCwd = process.cwd();
@@ -41,5 +41,15 @@ describe("getAssetPath", () => {
 
     expect(resolvedFromElsewhere).toBe(expected);
     await expect(fs.access(resolvedFromElsewhere)).resolves.toBeUndefined();
+  });
+
+  it("resolves from an explicit assets directory for bundled consumers", () => {
+    expect(
+      resolveAssetPath(
+        "/opt/my-app/resources/poster-assets",
+        "images",
+        "Bus.png"
+      )
+    ).toBe("/opt/my-app/resources/poster-assets/images/Bus.png");
   });
 });

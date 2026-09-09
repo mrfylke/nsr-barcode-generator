@@ -5,7 +5,7 @@ import { createWriteStream } from "fs";
 import * as QRCode from "qrcode";
 import { enturApi, StopPlaceInfo } from "./enturApi";
 import { fontLoader } from "./fontLoader";
-import { getAssetPath } from "./assets";
+import { resolveAssetPath } from "./assets";
 
 export interface PdfStyleConfig {
   /** Color for header and footer background (hex color) */
@@ -74,6 +74,11 @@ export type StopPlaceRequest = StopPlaceId | StopPlaceInput;
 
 export interface PdfGenerationOptions {
   outputDirectory: string;
+  /**
+   * Absolute path to a copied package `assets` directory. Use this when a
+   * bundler rewrites `__dirname` while producing a standalone executable.
+   */
+  assetsDirectory?: string;
   format?: "A4" | "A3" | "Letter";
   /** PDF orientation (defaults to landscape) */
   orientation?: "landscape" | "portrait";
@@ -292,7 +297,7 @@ async function generateSinglePdf(
   return new Promise(async (resolvePromise, reject) => {
     try {
       // Load Poppins fonts
-      const fonts = await fontLoader.loadPoppins();
+      const fonts = await fontLoader.loadPoppins(options?.assetsDirectory);
 
       // Get orientation (default to landscape for backward compatibility)
       const orientation = options?.orientation || "landscape";
@@ -343,7 +348,11 @@ async function generateSinglePdf(
       const headerFooterColor = styleConfig.headerFooterColor || "#1A4D75"; // Default FRAM blue
       const logoPath =
         styleConfig.logoPath ||
-        getAssetPath("images", "fram_mor_fylkeskommune_dark.png");
+        resolveAssetPath(
+          options?.assetsDirectory,
+          "images",
+          "fram_mor_fylkeskommune_dark.png"
+        );
       const logoWidth = styleConfig.logoWidth || 105;
       const fallbackLogoText = styleConfig.fallbackLogoText || "FRAM";
       const fallbackLogoSubtext =
@@ -410,7 +419,11 @@ async function generateSinglePdf(
           iconFileName = "Bus.png";
         }
 
-        const iconPath = getAssetPath("images", iconFileName);
+        const iconPath = resolveAssetPath(
+          options?.assetsDirectory,
+          "images",
+          iconFileName
+        );
         const iconBuffer = await fs.readFile(iconPath);
 
         // Add white circular background

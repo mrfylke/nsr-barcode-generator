@@ -18,3 +18,17 @@ function getPackageRoot(): string {
 export function getAssetPath(...segments: string[]): string {
   return join(getPackageRoot(), "assets", ...segments);
 }
+
+/**
+ * Resolves a package asset from a caller-provided assets directory when set.
+ * This supports bundlers that replace `__dirname` with a build-time absolute
+ * path while keeping the default package-relative behavior for Node.js users.
+ */
+export function resolveAssetPath(
+  assetsDirectory: string | undefined,
+  ...segments: string[]
+): string {
+  return assetsDirectory
+    ? join(assetsDirectory, ...segments)
+    : getAssetPath(...segments);
+}
