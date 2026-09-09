@@ -11,26 +11,61 @@ import {
   IdParseResult,
 } from "./utils/idParser";
 import {
-  generatePdfsForIds,
+  generatePdfsForStopPlaces,
   PdfGenerationOptions,
   PdfGenerationResult,
+  PdfGenerationItemResult,
+  PdfGenerationFailure,
+  PdfProgressEvent,
   PdfStyleConfig,
+  StopPlaceQrContext,
+  StopPlaceId,
+  StopPlaceInput,
+  StopPlaceRequest,
 } from "./utils/pdfGenerator";
+import { isValidNsrStopPlaceId, extractStopPlaceNumber } from "./utils/nsrId";
 
 /**
- * Options for processing a file containing NSR IDs
+ * Options shared by all PDF-generating API entry points, beyond the base
+ * output/format/orientation/style options.
  */
-export interface ProcessFileOptions {
-  /** Path to the input file containing NSR IDs */
-  filePath: string;
-  /** Output directory for generated PDFs */
-  outputDirectory: string;
+interface CommonPdfOptions {
   /** PDF format (defaults to A4) */
   format?: "A4" | "A3" | "Letter";
   /** PDF orientation (defaults to landscape) */
   orientation?: "landscape" | "portrait";
   /** Style configuration for PDF appearance */
   style?: PdfStyleConfig;
+  /**
+   * Builds the complete QR code URL for a stop place. Falls back to the
+   * package's built-in departures URL when omitted.
+   */
+  generateQrUrl?: (stopPlace: StopPlaceQrContext) => string;
+  /** Replace existing output files instead of skipping them (defaults to false) */
+  overwrite?: boolean;
+  /** Called once per requested NSR ID as generation progresses */
+  onProgress?: (event: PdfProgressEvent) => void;
+  /** Overrides how stop place metadata is fetched (defaults to the Entur API) */
+  stopPlaceFetcher?: PdfGenerationOptions["stopPlaceFetcher"];
+  /**
+   * When true, a supplied `name`/`StopPlaceInput` that omits transport mode
+   * still triggers an Entur lookup for just the transport mode (used to
+   * pick the correct poster icon); the supplied name is never overwritten.
+   * Defaults to false, which falls back to the default bus icon and never
+   * fetches. Has no effect on IDs without any locally-supplied metadata -
+   * those are always fetched from Entur regardless of this option.
+   */
+  enrichTransportMode?: boolean;
+}
+
+/**
+ * Options for processing a file containing NSR IDs
+ */
+export interface ProcessFileOptions extends CommonPdfOptions {
+  /** Path to the input file containing NSR IDs */
+  filePath: string;
+  /** Output directory for generated PDFs */
+  outputDirectory: string;
 }
 
 /**
@@ -48,17 +83,18 @@ export interface ProcessFileResult {
 /**
  * Options for generating a PDF from a single NSR ID
  */
-export interface GenerateSinglePdfOptions {
+export interface GenerateSinglePdfOptions extends CommonPdfOptions {
   /** The NSR ID (e.g., "NSR:StopPlace:39598") */
   nsrId: string;
   /** Output directory for generated PDF */
   outputDirectory: string;
-  /** PDF format (defaults to A4) */
-  format?: "A4" | "A3" | "Letter";
-  /** PDF orientation (defaults to landscape) */
-  orientation?: "landscape" | "portrait";
-  /** Style configuration for PDF appearance */
-  style?: PdfStyleConfig;
+  /**
+   * Already-known stop-place name. When supplied, Entur is never queried
+   * for this ID - the name is used directly.
+   */
+  name?: string;
+  /** Transport mode(s) for this stop place, used to pick the poster icon. Only used together with `name`. */
+  transportMode?: string[];
 }
 
 /**
@@ -84,6 +120,42 @@ export interface ValidationResult {
 }
 
 /**
+ * Builds a fully-populated PdfGenerationOptions object from the common
+ * optional fields, respecting `exactOptionalPropertyTypes`.
+ */
+function buildPdfOptions(
+  outputDirectory: string,
+  options: CommonPdfOptions
+): PdfGenerationOptions {
+  const pdfOptions: PdfGenerationOptions = { outputDirectory };
+  if (options.format) {
+    pdfOptions.format = options.format;
+  }
+  if (options.orientation) {
+    pdfOptions.orientation = options.orientation;
+  }
+  if (options.style) {
+    pdfOptions.style = options.style;
+  }
+  if (options.generateQrUrl) {
+    pdfOptions.generateQrUrl = options.generateQrUrl;
+  }
+  if (options.overwrite !== undefined) {
+    pdfOptions.overwrite = options.overwrite;
+  }
+  if (options.onProgress) {
+    pdfOptions.onProgress = options.onProgress;
+  }
+  if (options.stopPlaceFetcher) {
+    pdfOptions.stopPlaceFetcher = options.stopPlaceFetcher;
+  }
+  if (options.enrichTransportMode !== undefined) {
+    pdfOptions.enrichTransportMode = options.enrichTransportMode;
+  }
+  return pdfOptions;
+}
+
+/**
  * Core API class for NSR barcode generation
  */
 export class NsrBarcodeApi {
@@ -95,26 +167,25 @@ export class NsrBarcodeApi {
   static async processFile(
     options: ProcessFileOptions
   ): Promise<ProcessFileResult> {
-    const { filePath, outputDirectory, format, orientation, style } = options;
+    const { filePath, outputDirectory } = options;
 
     try {
       // Read and parse the file
       const content = await readFile(filePath);
       const parseResult = await parseUniqueIds(content);
 
-      // Generate PDFs for all unique IDs
+      // Validate all NSR IDs
       const uniqueIdsArray = Array.from(parseResult.uniqueIds);
-      const pdfOptions: PdfGenerationOptions = { outputDirectory };
-      if (format) {
-        pdfOptions.format = format;
+      for (const nsrId of uniqueIdsArray) {
+        const validation = this.validateNsrId(nsrId);
+        if (!validation.isValid) {
+          throw new Error(`Invalid NSR ID "${nsrId}": ${validation.error}`);
+        }
       }
-      if (orientation) {
-        pdfOptions.orientation = orientation;
-      }
-      if (style) {
-        pdfOptions.style = style;
-      }
-      const pdfResult = await generatePdfsForIds(uniqueIdsArray, pdfOptions);
+
+      // Generate PDFs for all unique IDs
+      const pdfOptions = buildPdfOptions(outputDirectory, options);
+      const pdfResult = await generatePdfsForStopPlaces(uniqueIdsArray, pdfOptions);
 
       // Create summary
       const parseSummary = formatIdCountResult(parseResult);
@@ -142,7 +213,7 @@ export class NsrBarcodeApi {
   static async generateSinglePdf(
     options: GenerateSinglePdfOptions
   ): Promise<GenerateSinglePdfResult> {
-    const { nsrId, outputDirectory, format, orientation, style } = options;
+    const { nsrId, outputDirectory, name, transportMode } = options;
 
     try {
       // Validate the NSR ID format
@@ -151,20 +222,14 @@ export class NsrBarcodeApi {
         throw new Error(validation.error);
       }
 
-      // Generate PDF
-      const pdfOptions: PdfGenerationOptions = { outputDirectory };
-      if (format) {
-        pdfOptions.format = format;
-      }
-      if (orientation) {
-        pdfOptions.orientation = orientation;
-      }
-      if (style) {
-        pdfOptions.style = style;
-      }
-      const pdfResult = await generatePdfsForIds([nsrId], pdfOptions);
+      // Generate PDF. When `name` is supplied, skip Entur entirely for this ID.
+      const request: StopPlaceRequest = name
+        ? { id: nsrId, name, ...(transportMode ? { transportMode } : {}) }
+        : nsrId;
+      const pdfOptions = buildPdfOptions(outputDirectory, options);
+      const pdfResult = await generatePdfsForStopPlaces([request], pdfOptions);
 
-      const success = pdfResult.totalGenerated > 0;
+      const success = pdfResult.totalGenerated > 0 || pdfResult.skipped.length > 0;
       const summary = success
         ? `Successfully generated PDF for ${nsrId} in ${pdfResult.outputDirectory}`
         : `Failed to generate PDF for ${nsrId}`;
@@ -183,24 +248,29 @@ export class NsrBarcodeApi {
   }
 
   /**
-   * Generate PDFs for multiple NSR IDs
-   * @param nsrIds - Array of NSR IDs
+   * Generate PDFs for multiple stop places. Each entry is either a bare NSR
+   * ID (resolved via Entur) or a {@link StopPlaceInput} object carrying
+   * already-known metadata (Entur is never queried for that ID). Mixing the
+   * two forms in a single array is supported. If an ID appears more than
+   * once, the last entry for that ID wins.
+   * @param stopPlaces - Array of NSR IDs and/or known stop-place data
    * @param options - PDF generation options
    * @returns Promise that resolves to the generation result
    */
   static async generateMultiplePdfs(
-    nsrIds: string[],
+    stopPlaces: StopPlaceRequest[],
     options: PdfGenerationOptions
   ): Promise<PdfGenerationResult> {
     // Validate all NSR IDs
-    for (const nsrId of nsrIds) {
+    for (const request of stopPlaces) {
+      const nsrId = typeof request === "string" ? request : request.id;
       const validation = this.validateNsrId(nsrId);
       if (!validation.isValid) {
         throw new Error(`Invalid NSR ID "${nsrId}": ${validation.error}`);
       }
     }
 
-    return generatePdfsForIds(nsrIds, options);
+    return generatePdfsForStopPlaces(stopPlaces, options);
   }
 
   /**
@@ -216,26 +286,11 @@ export class NsrBarcodeApi {
       };
     }
 
-    if (!nsrId.startsWith("NSR:StopPlace:")) {
+    if (!isValidNsrStopPlaceId(nsrId)) {
       return {
         isValid: false,
-        error: "Invalid NSR ID format. Expected format: NSR:StopPlace:XXXXX",
-      };
-    }
-
-    const parts = nsrId.split(":");
-    if (parts.length !== 3) {
-      return {
-        isValid: false,
-        error: "Invalid NSR ID format. Expected format: NSR:StopPlace:XXXXX",
-      };
-    }
-
-    const idPart = parts[2];
-    if (!idPart || !/^\d+$/.test(idPart)) {
-      return {
-        isValid: false,
-        error: "Invalid NSR ID format. ID part must be numeric",
+        error:
+          "Invalid NSR ID format. Expected format: NSR:StopPlace:<digits> with no extra whitespace or characters",
       };
     }
 
@@ -268,8 +323,16 @@ export {
   IdParseError,
   PdfGenerationOptions,
   PdfGenerationResult,
+  PdfGenerationItemResult,
+  PdfGenerationFailure,
+  PdfProgressEvent,
   PdfStyleConfig,
+  StopPlaceQrContext,
+  StopPlaceId,
+  StopPlaceInput,
+  StopPlaceRequest,
   formatIdCountResult,
+  extractStopPlaceNumber,
 };
 
 // Default export

@@ -4,7 +4,8 @@ import { resolve, join } from "path";
 import { createWriteStream } from "fs";
 import * as QRCode from "qrcode";
 import { enturApi, StopPlaceInfo } from "./enturApi";
-import { fontLoader, FontFamily } from "./fontLoader";
+import { fontLoader } from "./fontLoader";
+import { getAssetPath } from "./assets";
 
 export interface PdfStyleConfig {
   /** Color for header and footer background (hex color) */
@@ -19,97 +20,287 @@ export interface PdfStyleConfig {
   fallbackLogoSubtext?: string;
 }
 
+/**
+ * Context passed to a `generateQrUrl` callback once Entur metadata has been
+ * resolved for a stop place.
+ */
+export interface StopPlaceQrContext {
+  /** Full ID, for example "NSR:StopPlace:10003". */
+  id: string;
+  /** Resolved stop-place name from Entur. */
+  name: string;
+}
+
+/**
+ * Per-item progress event emitted during batch PDF generation.
+ */
+export interface PdfProgressEvent {
+  current: number;
+  total: number;
+  nsrId: string;
+  outputPath?: string;
+  status: "generated" | "skipped" | "error";
+  error?: string;
+}
+
+/**
+ * Full NSR ID string, e.g. "NSR:StopPlace:10003". Aliased purely for
+ * readability at call sites that accept either a bare ID or a
+ * {@link StopPlaceInput}.
+ */
+export type StopPlaceId = string;
+
+/**
+ * Stop-place metadata the caller already knows, supplied directly instead of
+ * being looked up from Entur.
+ */
+export interface StopPlaceInput {
+  /** Full NSR ID, for example "NSR:StopPlace:10003". */
+  id: StopPlaceId;
+  /** Resolved stop-place name to use for this ID. */
+  name: string;
+  /** Transport mode(s) for this stop place, used to pick the poster icon. */
+  transportMode?: string[];
+}
+
+/**
+ * A single item to generate a poster for: either a bare NSR ID (its
+ * metadata is resolved via Entur) or a fully-specified {@link StopPlaceInput}
+ * (Entur is never queried for it). There is deliberately no separate
+ * "list of IDs" plus "list of overrides" - a request and its metadata are
+ * the same piece of information, so they travel together in one array.
+ */
+export type StopPlaceRequest = StopPlaceId | StopPlaceInput;
+
 export interface PdfGenerationOptions {
   outputDirectory: string;
   format?: "A4" | "A3" | "Letter";
   /** PDF orientation (defaults to landscape) */
   orientation?: "landscape" | "portrait";
+  /**
+   * Builds the complete QR code URL for a stop place, called after stop
+   * place metadata has been resolved (either from Entur or supplied
+   * directly via a {@link StopPlaceInput}). The returned string is used
+   * verbatim as the QR payload (no prefixing, encoding, or rewriting). Must
+   * resolve to a non-empty, absolute http(s) URL; otherwise that item is
+   * reported as a generation error. When omitted, falls back to the
+   * package's built-in departures URL for backward compatibility.
+   */
+  generateQrUrl?: (stopPlace: StopPlaceQrContext) => string;
   /** Style configuration for PDF appearance */
   style?: PdfStyleConfig;
+  /** Replace an existing output file instead of skipping it (defaults to false) */
+  overwrite?: boolean;
+  /** Called once per requested NSR ID as batch generation progresses */
+  onProgress?: (event: PdfProgressEvent) => void;
+  /**
+   * Overrides how stop place metadata is fetched for requests that are bare
+   * IDs (not a {@link StopPlaceInput}). Defaults to the built-in Entur
+   * client. Useful for tests (avoids live network calls).
+   */
+  stopPlaceFetcher?: (ids: string[]) => Promise<(StopPlaceInfo | null)[]>;
+  /**
+   * When true, a {@link StopPlaceInput} that omits `transportMode` still
+   * triggers an Entur (or `stopPlaceFetcher`) lookup for that ID, used
+   * purely to fill in the poster icon's transport mode - the supplied
+   * `name` is always kept as-is and never overwritten by the fetch.
+   * `StopPlaceInput`s that already specify `transportMode` are never
+   * fetched. If the enrichment lookup fails or returns no transport mode,
+   * generation still proceeds (falls back to the default bus icon) rather
+   * than failing the item - the name was already known, so a poster can
+   * always be produced. Defaults to false (bus icon fallback, no fetch).
+   */
+  enrichTransportMode?: boolean;
+}
+
+export interface PdfGenerationItemResult {
+  nsrId: string;
+  outputPath: string;
+}
+
+export interface PdfGenerationFailure {
+  nsrId: string;
+  error: string;
 }
 
 export interface PdfGenerationResult {
+  /** Paths of files generated in this run (excludes skipped files) */
   generatedFiles: string[];
+  /** Count of files generated in this run (excludes skipped files) */
   totalGenerated: number;
   outputDirectory: string;
+  /** IDs successfully generated in this run */
+  generated: PdfGenerationItemResult[];
+  /** IDs skipped because an output file already existed and overwrite was false */
+  skipped: PdfGenerationItemResult[];
+  /** IDs that failed to generate, with an error message */
+  failed: PdfGenerationFailure[];
 }
 
 /**
- * Generates individual PDF files for each unique ID
- * @param ids - Array of unique IDs to generate PDFs for
+ * Generates individual PDF files for each requested stop place. Each
+ * request is either a bare NSR ID (resolved via Entur) or a
+ * {@link StopPlaceInput} carrying already-known metadata (Entur is never
+ * queried for that ID). If a request is duplicated by ID, the last one wins.
+ * @param requests - Array of stop place requests to generate PDFs for
  * @param options - PDF generation options
  * @returns Promise that resolves to the generation result
  */
-export async function generatePdfsForIds(
-  ids: string[],
+export async function generatePdfsForStopPlaces(
+  requests: StopPlaceRequest[],
   options: PdfGenerationOptions
 ): Promise<PdfGenerationResult> {
-  const { outputDirectory } = options;
+  const { outputDirectory, overwrite = false, onProgress } = options;
 
   // Ensure output directory exists
   await ensureDirectoryExists(outputDirectory);
 
-  const generatedFiles: string[] = [];
+  const generated: PdfGenerationItemResult[] = [];
+  const skipped: PdfGenerationItemResult[] = [];
+  const failed: PdfGenerationFailure[] = [];
 
-  // Fetch stop place information for all IDs in parallel
-  console.log("Fetching stop place information from Entur API...");
-  const stopPlaceInfos = await enturApi.getMultipleStopPlaces(ids);
+  const ids: string[] = requests.map((request) =>
+    typeof request === "string" ? request : request.id
+  );
+
+  const overridesById = new Map<string, StopPlaceInput>();
+  for (const request of requests) {
+    if (typeof request !== "string") {
+      overridesById.set(request.id, request); // last one wins on duplicate IDs
+    }
+  }
+  // Bare IDs always need a lookup. StopPlaceInputs only need one if the
+  // caller opted into transport-mode enrichment and didn't already supply it.
+  const idsNeedingFetch = ids.filter((id) => {
+    const override = overridesById.get(id);
+    if (!override) return true;
+    return Boolean(options.enrichTransportMode) && !override.transportMode;
+  });
+
+  let fetchedInfos: (StopPlaceInfo | null)[] = [];
+  if (idsNeedingFetch.length > 0) {
+    const fetchStopPlaces =
+      options.stopPlaceFetcher ??
+      ((idsToFetch: string[]) => enturApi.getMultipleStopPlaces(idsToFetch));
+    fetchedInfos = await fetchStopPlaces(idsNeedingFetch);
+  }
+  const fetchedById = new Map<string, StopPlaceInfo | null>(
+    idsNeedingFetch.map((id, index) => [id, fetchedInfos[index] ?? null])
+  );
+
+  const stopPlaceInfos: (StopPlaceInfo | null)[] = ids.map((id) => {
+    const override = overridesById.get(id);
+    if (override) {
+      // The supplied name is authoritative and never overwritten by a fetch.
+      const info: StopPlaceInfo = { id, name: override.name };
+      const transportMode = override.transportMode ?? fetchedById.get(id)?.transportMode;
+      if (transportMode) {
+        info.transportMode = transportMode;
+      }
+      return info;
+    }
+    return fetchedById.get(id) ?? null;
+  });
+
+  const total = ids.length;
 
   for (let i = 0; i < ids.length; i++) {
     const id = ids[i];
-    const stopPlaceInfo = stopPlaceInfos[i];
-
     if (!id) continue; // Skip if ID is undefined
+    const current = i + 1;
 
     try {
+      const stopPlaceInfo = stopPlaceInfos[i] ?? null;
+
+      if (!stopPlaceInfo) {
+        throw new Error(`Failed to resolve stop place metadata for "${id}"`);
+      }
+
       // Generate safe filename from ID and stop place name
-      const filename = generateSafeFilename(id, stopPlaceInfo?.name);
+      const filename = generateSafeFilename(id, stopPlaceInfo.name);
       const outputPath = join(outputDirectory, `${filename}.pdf`);
+
+      if (!overwrite && (await pathExists(outputPath))) {
+        skipped.push({ nsrId: id, outputPath });
+        onProgress?.({
+          current,
+          total,
+          nsrId: id,
+          outputPath,
+          status: "skipped",
+        });
+        continue;
+      }
 
       // Generate PDF with stop place information
       await generateSinglePdf(id, outputPath, stopPlaceInfo, options);
-      generatedFiles.push(outputPath);
-
-      const infoText = stopPlaceInfo?.name ? ` (${stopPlaceInfo.name})` : "";
-      console.log(`Generated PDF: ${filename}.pdf${infoText}`);
+      generated.push({ nsrId: id, outputPath });
+      onProgress?.({
+        current,
+        total,
+        nsrId: id,
+        outputPath,
+        status: "generated",
+      });
     } catch (error) {
-      console.error(`Failed to generate PDF for ID "${id}":`, error);
-      // Continue with other IDs even if one fails
+      const message = error instanceof Error ? error.message : "Unknown error";
+      failed.push({ nsrId: id, error: message });
+      onProgress?.({ current, total, nsrId: id, status: "error", error: message });
     }
   }
 
   return {
-    generatedFiles,
-    totalGenerated: generatedFiles.length,
+    generatedFiles: generated.map((item) => item.outputPath),
+    totalGenerated: generated.length,
     outputDirectory: resolve(outputDirectory),
+    generated,
+    skipped,
+    failed,
   };
+}
+
+/**
+ * Validates that a value is a non-empty, syntactically valid absolute
+ * http(s) URL.
+ */
+function isValidAbsoluteHttpUrl(value: unknown): value is string {
+  if (typeof value !== "string" || value.length === 0) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 /**
  * Generates a single PDF with centered ID and stop place information
  * @param id - The ID to display
  * @param outputPath - Output file path
- * @param stopPlaceInfo - Optional stop place information from Entur API
+ * @param stopPlaceInfo - Stop place information from Entur API
  * @param options - PDF generation options including style configuration
  */
 async function generateSinglePdf(
   id: string,
   outputPath: string,
-  stopPlaceInfo?: StopPlaceInfo | null,
+  stopPlaceInfo: StopPlaceInfo,
   options?: PdfGenerationOptions
 ): Promise<void> {
-  return new Promise(async (resolve, reject) => {
+  return new Promise(async (resolvePromise, reject) => {
     try {
       // Load Poppins fonts
-      console.log("Loading Poppins fonts...");
       const fonts = await fontLoader.loadPoppins();
 
       // Get orientation (default to landscape for backward compatibility)
       const orientation = options?.orientation || "landscape";
+      const format = options?.format || "A4";
 
-      // Create a new PDF document with specified orientation
+      // Create a new PDF document with specified format/orientation
       const doc = new PDFDocument({
-        size: "A4",
+        size: format,
         layout: orientation,
         margins: {
           top: 50,
@@ -132,7 +323,6 @@ async function generateSinglePdf(
           doc.registerFont("Poppins-Bold", fonts.bold);
           poppinsBold = "Poppins-Bold";
         }
-        console.log("Poppins fonts registered successfully");
       } catch (fontError) {
         console.warn(
           "Failed to register Poppins fonts, using fallback:",
@@ -153,7 +343,7 @@ async function generateSinglePdf(
       const headerFooterColor = styleConfig.headerFooterColor || "#1A4D75"; // Default FRAM blue
       const logoPath =
         styleConfig.logoPath ||
-        join(process.cwd(), "images", "fram_mor_fylkeskommune_dark.png");
+        getAssetPath("images", "fram_mor_fylkeskommune_dark.png");
       const logoWidth = styleConfig.logoWidth || 105;
       const fallbackLogoText = styleConfig.fallbackLogoText || "FRAM";
       const fallbackLogoSubtext =
@@ -161,7 +351,6 @@ async function generateSinglePdf(
 
       // Define colors
       const white = "#FFFFFF";
-      const lightGray = "#F5F5F5";
       const darkGray = "#333333";
 
       // Add rounded border box around entire content
@@ -204,7 +393,7 @@ async function generateSinglePdf(
 
       try {
         // Determine icon based on transport mode
-        const transportModes = stopPlaceInfo?.transportMode || [];
+        const transportModes = stopPlaceInfo.transportMode || [];
         let iconFileName = "Bus.png"; // Default to bus
 
         // Check each transport mode (can be string or array of strings)
@@ -221,7 +410,7 @@ async function generateSinglePdf(
           iconFileName = "Bus.png";
         }
 
-        const iconPath = join(process.cwd(), "images", iconFileName);
+        const iconPath = getAssetPath("images", iconFileName);
         const iconBuffer = await fs.readFile(iconPath);
 
         // Add white circular background
@@ -258,7 +447,7 @@ async function generateSinglePdf(
       }
 
       // Add stop name in header
-      const stopName = stopPlaceInfo?.name || id;
+      const stopName = stopPlaceInfo.name || id;
       doc
         .fillColor(white)
         .fontSize(36)
@@ -274,11 +463,29 @@ async function generateSinglePdf(
       const contentHeight = orientation === "portrait" ? 400 : 310; // More vertical space needed for portrait
       const contentY = headerHeight + (availableHeight - contentHeight) / 2;
 
-      // Generate QR code first (used in both layouts)
-      const url = `https://reise.frammr.no/departures/${encodeURIComponent(
-        id
-      )}?qr`;
-      const qrCodeDataURL = await QRCode.toDataURL(url, {
+      // Determine the QR code payload
+      let qrUrl: string;
+      if (options?.generateQrUrl) {
+        const qrContext: StopPlaceQrContext = {
+          id,
+          name: stopPlaceInfo.name ?? id,
+        };
+        const candidate = options.generateQrUrl(qrContext);
+        if (!isValidAbsoluteHttpUrl(candidate)) {
+          throw new Error(
+            `generateQrUrl returned an invalid URL for "${id}": ${JSON.stringify(
+              candidate
+            )}. Expected a non-empty absolute http(s) URL.`
+          );
+        }
+        qrUrl = candidate;
+      } else {
+        qrUrl = `https://reise.frammr.no/departures/${encodeURIComponent(
+          id
+        )}?qr`;
+      }
+
+      const qrCodeDataURL = await QRCode.toDataURL(qrUrl, {
         width: 200,
         margin: 1,
         color: {
@@ -598,7 +805,7 @@ async function generateSinglePdf(
       doc.end();
 
       stream.on("finish", () => {
-        resolve();
+        resolvePromise();
       });
 
       stream.on("error", (error) => {
@@ -679,5 +886,17 @@ async function ensureDirectoryExists(dirPath: string): Promise<void> {
   } catch {
     // Directory doesn't exist, create it
     await fs.mkdir(dirPath, { recursive: true });
+  }
+}
+
+/**
+ * Checks whether a path exists on disk.
+ */
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await fs.access(path);
+    return true;
+  } catch {
+    return false;
   }
 }

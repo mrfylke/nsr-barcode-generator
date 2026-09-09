@@ -1,0 +1,45 @@
+import { describe, it, expect, afterEach } from "vitest";
+import { promises as fs } from "fs";
+import os from "os";
+import path from "path";
+import { getAssetPath } from "./assets";
+
+describe("getAssetPath", () => {
+  const originalCwd = process.cwd();
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+  });
+
+  it("resolves bundled font and image assets that exist on disk", async () => {
+    await expect(
+      fs.access(getAssetPath("fonts", "poppins-400-normal.ttf"))
+    ).resolves.toBeUndefined();
+    await expect(
+      fs.access(getAssetPath("fonts", "poppins-700-normal.ttf"))
+    ).resolves.toBeUndefined();
+    await expect(
+      fs.access(getAssetPath("images", "fram_mor_fylkeskommune_dark.png"))
+    ).resolves.toBeUndefined();
+    await expect(
+      fs.access(getAssetPath("images", "Bus.png"))
+    ).resolves.toBeUndefined();
+  });
+
+  it("resolves the same absolute path regardless of process.cwd()", async () => {
+    const expected = getAssetPath("fonts", "poppins-400-normal.ttf");
+
+    const unrelatedDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "nsr-barcode-cwd-")
+    );
+    process.chdir(unrelatedDir);
+
+    const resolvedFromElsewhere = getAssetPath(
+      "fonts",
+      "poppins-400-normal.ttf"
+    );
+
+    expect(resolvedFromElsewhere).toBe(expected);
+    await expect(fs.access(resolvedFromElsewhere)).resolves.toBeUndefined();
+  });
+});

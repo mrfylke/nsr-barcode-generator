@@ -1,449 +1,181 @@
 # NSR Barcode Generator
 
-A CLI tool and programmatic API to generate PDF files for unique NSR IDs with customizable styling options.
+CLI and programmatic API for generating branded PDF posters (with a QR code) for NSR stop places. Embeddable in other apps (server, desktop) or used standalone.
 
-## Installation
+## Install
 
 ```bash
-npm install nsr-barcode-generator
-# or
-pnpm add nsr-barcode-generator
+pnpm add @mrfylke/nsr-barcode-generator
 ```
 
-## Programmatic Usage
-
-### Basic Usage
-
-```javascript
-const { NsrBarcodeApi } = require("nsr-barcode-generator");
-
-// Generate a single PDF with default styling
-async function generateSinglePdf() {
-  const result = await NsrBarcodeApi.generateSinglePdf({
-    nsrId: "NSR:StopPlace:39598",
-    outputDirectory: "./output",
-    format: "A4", // optional, defaults to A4
-  });
-
-  console.log(result.summary);
-  console.log("Success:", result.success);
-}
-
-// Generate a single PDF with custom styling
-async function generateCustomStyledPdf() {
-  const result = await NsrBarcodeApi.generateSinglePdf({
-    nsrId: "NSR:StopPlace:39598",
-    outputDirectory: "./output",
-    style: {
-      headerFooterColor: "#2E8B57", // Custom green color
-      logoPath: "./my-logo.png", // Custom logo path
-      logoWidth: 120, // Custom logo width
-      fallbackLogoText: "MY ORG", // Fallback if logo fails
-      fallbackLogoSubtext: "Transportation Authority",
-    },
-  });
-
-  console.log(result.summary);
-}
-
-// Generate multiple PDFs
-async function generateMultiplePdfs() {
-  const result = await NsrBarcodeApi.generateMultiplePdfs(
-    ["NSR:StopPlace:39598", "NSR:StopPlace:40308"],
-    {
-      outputDirectory: "./output",
-      style: {
-        headerFooterColor: "#FF6B35", // Orange theme
-      },
-    }
-  );
-
-  console.log("Generated:", result.totalGenerated, "PDFs");
-  console.log("Files:", result.generatedFiles);
-}
-
-// Process a file with custom styling
-async function processFile() {
-  const result = await NsrBarcodeApi.processFile({
-    filePath: "./ids.txt",
-    outputDirectory: "./output",
-    format: "A4",
-    style: {
-      headerFooterColor: "#8B4513", // Brown theme
-      logoPath: "./custom-logo.png",
-    },
-  });
-
-  console.log(result.summary);
-  console.log("Parse result:", result.parseResult);
-  console.log("PDF result:", result.pdfResult);
-}
-
-// Validate NSR ID
-function validateId() {
-  const validation = NsrBarcodeApi.validateNsrId("NSR:StopPlace:39598");
-  console.log("Valid:", validation.isValid);
-  if (!validation.isValid) {
-    console.log("Error:", validation.error);
-  }
-}
-
-// Parse file content without generating PDFs
-async function parseOnly() {
-  const result = await NsrBarcodeApi.parseIdsFromFile("./ids.txt");
-  console.log("Unique IDs:", result.uniqueIds.size);
-  console.log("Total processed:", result.totalCount);
-  console.log("Duplicates:", result.duplicateCount);
-}
-```
-
-### Style Configuration Options
-
-The `style` configuration object supports the following options:
+## Quick start
 
 ```typescript
-interface PdfStyleConfig {
-  /** Color for header and footer background (hex color) */
-  headerFooterColor?: string;
-  /** Path to logo image file for lower right corner */
-  logoPath?: string;
-  /** Logo width in pixels (height will be calculated to maintain aspect ratio) */
-  logoWidth?: number;
-  /** Fallback text to display if logo cannot be loaded */
-  fallbackLogoText?: string;
-  /** Additional fallback text (subtitle) */
-  fallbackLogoSubtext?: string;
-}
-```
+import { NsrBarcodeApi } from "@mrfylke/nsr-barcode-generator";
 
-**Default values:**
-
-- `headerFooterColor`: `#1A4D75` (FRAM blue)
-- `logoPath`: `./images/fram_mor_fylkeskommune_dark.png`
-- `logoWidth`: `105`
-- `fallbackLogoText`: `FRAM`
-- `fallbackLogoSubtext`: `Møre og Romsdal fylkeskommune`
-
-### TypeScript Usage
-
-```typescript
-import {
-  NsrBarcodeApi,
-  ProcessFileOptions,
-  GenerateSinglePdfOptions,
-  PdfStyleConfig,
-} from "nsr-barcode-generator";
-
-const styleConfig: PdfStyleConfig = {
-  headerFooterColor: "#2E8B57",
-  logoPath: "./my-logo.png",
-  logoWidth: 120,
-  fallbackLogoText: "MY ORG",
-};
-
-const options: GenerateSinglePdfOptions = {
+await NsrBarcodeApi.generateSinglePdf({
   nsrId: "NSR:StopPlace:39598",
   outputDirectory: "./output",
-  format: "A4",
-  style: styleConfig,
-};
+});
 
-const result = await NsrBarcodeApi.generateSinglePdf(options);
+const result = await NsrBarcodeApi.generateMultiplePdfs(
+  ["NSR:StopPlace:39598", "NSR:StopPlace:40308"],
+  { outputDirectory: "./output" }
+);
+console.log(result.generated, result.skipped, result.failed);
 ```
 
-### Error Handling
+## API
 
-```javascript
-try {
-  const result = await NsrBarcodeApi.generateSinglePdf({
-    nsrId: "invalid-id",
-    outputDirectory: "./output",
-  });
-} catch (error) {
-  if (error.code === "INVALID_FORMAT") {
-    console.error("Invalid NSR ID format:", error.message);
-  } else {
-    console.error("Unexpected error:", error.message);
-  }
+```typescript
+class NsrBarcodeApi {
+  static generateSinglePdf(options: GenerateSinglePdfOptions): Promise<GenerateSinglePdfResult>;
+  static generateMultiplePdfs(stopPlaces: StopPlaceRequest[], options: PdfGenerationOptions): Promise<PdfGenerationResult>;
+  static processFile(options: ProcessFileOptions): Promise<ProcessFileResult>;
+  static validateNsrId(nsrId: string): ValidationResult;
+  static parseIds(content: string): Promise<IdParseResult>;
+  static parseIdsFromFile(filePath: string): Promise<IdParseResult>;
 }
 ```
 
-## CLI Usage
+### Options
 
-The CLI interface supports all the same styling options:
+All three generation methods share these options:
 
-```bash
-# Generate PDFs from file with custom styling
-nsr-barcode file ids.txt -o ./output -f A4 \
-  --header-color "#2E8B57" \
-  --logo-path "./my-logo.png" \
-  --logo-width 120 \
-  --fallback-text "MY ORG" \
-  --fallback-subtext "Transportation Authority"
+```typescript
+interface PdfGenerationOptions {
+  outputDirectory: string;
+  format?: "A4" | "A3" | "Letter";           // default "A4"
+  orientation?: "landscape" | "portrait";     // default "landscape"
+  style?: PdfStyleConfig;                     // colors/logo, see below
+  overwrite?: boolean;                        // replace existing files (default false = skip)
+  onProgress?: (event: PdfProgressEvent) => void;
 
-# Generate single PDF with custom styling
-nsr-barcode id NSR:StopPlace:39598 -o ./output \
-  --header-color "#FF6B35" \
-  --fallback-text "CUSTOM"
+  // Custom QR payload. Called once metadata is resolved; the returned
+  // string is used verbatim (no rewriting). Must be an absolute http(s)
+  // URL, otherwise that item fails with a per-item error. Defaults to
+  // `https://reise.frammr.no/departures/<id>?qr`.
+  generateQrUrl?: (stopPlace: StopPlaceQrContext) => string;
 
-# Validate ID format
-nsr-barcode validate NSR:StopPlace:39598
+  // Overrides how stop-place metadata is looked up for bare IDs.
+  // Defaults to the built-in Entur client. Useful for tests.
+  stopPlaceFetcher?: (ids: string[]) => Promise<(StopPlaceInfo | null)[]>;
 
-# Parse file without generating PDFs
-nsr-barcode parse ids.txt
+  // See "Supplying stop place data" below.
+  enrichTransportMode?: boolean;              // default false
+}
+
+interface PdfStyleConfig {
+  headerFooterColor?: string;   // default "#1A4D75"
+  logoPath?: string;            // default: bundled FRAM logo
+  logoWidth?: number;           // default 105
+  fallbackLogoText?: string;    // default "FRAM"
+  fallbackLogoSubtext?: string; // default "Møre og Romsdal fylkeskommune"
+}
 ```
 
-### CLI Options
+`generateSinglePdf` additionally takes `nsrId: string`, plus `name?`/`transportMode?` shortcuts (see below). `processFile` takes `filePath: string` instead of a stop-place array.
 
-#### Basic Options
+### Supplying stop place data (skip Entur)
 
-- `-o, --output <directory>`: Output directory for generated PDFs (required)
-- `-f, --format <format>`: PDF format (A4, A3, Letter) - defaults to A4
-- `-h, --help`: Display help for command
-- `-V, --version`: Output the version number
+`generateMultiplePdfs` accepts a mix of bare IDs and known data - no separate list to keep in sync:
 
-#### Style Options
+```typescript
+type StopPlaceRequest = string | { id: string; name: string; transportMode?: string[] };
 
-- `--header-color <color>`: Header and footer background color (hex format, e.g., #1A4D75)
-- `--logo-path <path>`: Path to logo image file for lower right corner
-- `--logo-width <width>`: Logo width in pixels
-- `--fallback-text <text>`: Fallback text if logo cannot be loaded
-- `--fallback-subtext <text>`: Additional fallback text (subtitle)
-
-### CLI Commands
-
-```bash
-# Show all available commands
-nsr-barcode --help
-
-# File processing command
-nsr-barcode file <file> [options]
-
-# Single ID command
-nsr-barcode id <nsrId> [options]
-
-# Validation command
-nsr-barcode validate <nsrId>
-
-# Parse command (no PDF generation)
-nsr-barcode parse <file>
+await NsrBarcodeApi.generateMultiplePdfs(
+  [
+    { id: "NSR:StopPlace:10003", name: "Malmefjorden" },     // Entur skipped
+    { id: "NSR:StopPlace:10004", name: "X", transportMode: ["bus"] },
+    "NSR:StopPlace:40308",                                    // resolved via Entur
+  ],
+  { outputDirectory: "./output" }
+);
 ```
 
-## API Reference
+Duplicate IDs: last entry wins. If every entry has data, Entur is never called. If a bare ID can't be resolved, that item fails (`result.failed`) rather than producing a poster with a misleading name.
 
-### Classes
+`generateSinglePdf` has the same shortcut as flat fields: `{ nsrId, name?, transportMode? }` - supplying `name` skips Entur.
 
-#### `NsrBarcodeApi`
+Missing `transportMode` just falls back to the default bus icon. To fetch the correct icon while keeping your supplied `name`, set `enrichTransportMode: true` - it fetches only the entries missing a transport mode, only reads that field, and never overwrites your `name` (a failed fetch still succeeds with the bus icon).
 
-Static class providing all API functionality.
+### Result & progress
 
-**Methods:**
+```typescript
+interface PdfGenerationResult {
+  generated: { nsrId: string; outputPath: string }[];
+  skipped: { nsrId: string; outputPath: string }[];   // overwrite: false and file existed
+  failed: { nsrId: string; error: string }[];
+  generatedFiles: string[];  // = generated.map(g => g.outputPath), kept for compatibility
+  totalGenerated: number;    // = generated.length
+  outputDirectory: string;
+}
 
-- `processFile(options: ProcessFileOptions): Promise<ProcessFileResult>`
-- `generateSinglePdf(options: GenerateSinglePdfOptions): Promise<GenerateSinglePdfResult>`
-- `generateMultiplePdfs(nsrIds: string[], options: PdfGenerationOptions): Promise<PdfGenerationResult>`
-- `validateNsrId(nsrId: string): ValidationResult`
-- `parseIds(content: string): Promise<IdParseResult>`
-- `parseIdsFromFile(filePath: string): Promise<IdParseResult>`
+interface PdfProgressEvent {
+  current: number; total: number; nsrId: string;
+  outputPath?: string;
+  status: "generated" | "skipped" | "error";
+  error?: string;
+}
+```
+
+`onProgress` fires once per requested ID. One item failing never aborts the batch.
 
 ### Types
 
-All TypeScript types are exported and available for use:
+`ProcessFileOptions/Result`, `GenerateSinglePdfOptions/Result`, `PdfGenerationOptions/Result`, `PdfProgressEvent`, `PdfStyleConfig`, `StopPlaceQrContext`, `StopPlaceId`/`StopPlaceInput`/`StopPlaceRequest`, `ValidationResult`, `IdParseResult`/`IdParseError` are all exported.
 
-- `ProcessFileOptions`
-- `ProcessFileResult`
-- `GenerateSinglePdfOptions`
-- `GenerateSinglePdfResult`
-- `PdfGenerationOptions`
-- `PdfGenerationResult`
-- `PdfStyleConfig`
-- `ValidationResult`
-- `IdParseResult`
-- `IdParseError`
+### NSR ID format & filenames
 
-### Styling Examples
+Only `NSR:StopPlace:<digits>` is accepted (no whitespace, no `NSR:Quay:*`, no extra segments).
 
-#### Corporate Branding
+Output files are named `{NSR_ID}-{slugified-name}.pdf`, e.g. `NSR_StopPlace_39598-malmefjorden.pdf` (Norwegian characters transliterated: `æ→ae`, `ø→o`, `å→aa`).
 
-```javascript
-const corporateStyle = {
-  headerFooterColor: "#003366", // Navy blue
-  logoPath: "./assets/company-logo.png",
-  logoWidth: 140,
-  fallbackLogoText: "ACME TRANSIT",
-  fallbackLogoSubtext: "Public Transportation Services",
-};
+## CLI
+
+```bash
+nsr-barcode file ids.txt -o ./output [-f A4|A3|Letter] [--orientation landscape|portrait] [--overwrite] \
+  [--header-color "#2E8B57"] [--logo-path ./logo.png] [--logo-width 120] \
+  [--fallback-text "MY ORG"] [--fallback-subtext "Subtitle"]
+
+nsr-barcode id NSR:StopPlace:39598 -o ./output   # same options as above
+nsr-barcode validate NSR:StopPlace:39598          # check ID format only
+nsr-barcode parse ids.txt                         # list unique IDs, no PDFs
 ```
 
-#### Colorful Theme
+## Embeddability
 
-```javascript
-const colorfulStyle = {
-  headerFooterColor: "#FF6B35", // Bright orange
-  logoPath: "./assets/colorful-logo.png",
-  fallbackLogoText: "CITY BUS",
-  fallbackLogoSubtext: "Urban Transit Network",
-};
-```
-
-#### Minimal Style
-
-```javascript
-const minimalStyle = {
-  headerFooterColor: "#333333", // Dark gray
-  fallbackLogoText: "TRANSIT",
-  fallbackLogoSubtext: "", // No subtitle
-};
-```
+Fonts (bundled Poppins) and images resolve relative to the package's own install location, not `process.cwd()` - safe inside a packaged desktop app with a read-only install dir. Nothing is downloaded or cached to disk at runtime; a bundled font that fails to read falls back to Helvetica.
 
 ## Development
 
-### Prerequisites
-
-- Node.js >= 18.0.0
-- pnpm >= 8.0.0
-- TypeScript 5.x
-
-### Setup
-
 ```bash
-# Install dependencies
 pnpm install
-
-# Build the project
-pnpm run build
+pnpm run build   # compile
+pnpm run test    # vitest
+pnpm run dev ...  # tsx, same args as the CLI
 ```
-
-### Development Scripts
-
-- `pnpm run build` - Compile TypeScript to JavaScript
-- `pnpm run dev` - Run in development mode with tsx
-- `pnpm run watch` - Watch for changes and rebuild
-- `pnpm run clean` - Clean the dist directory
-- `pnpm start` - Run the built application
-
-### Development Usage
-
-```bash
-# Run in development mode
-pnpm run dev file ./example.txt -o ./output
-
-# Example with custom styling
-pnpm run dev id NSR:StopPlace:39598 -o ./output --header-color "#FF6B35"
-```
-
-### Production Usage
-
-```bash
-# Build and run
-pnpm run build
-pnpm start file ./example.txt -o ./output
-
-# Or use the binary directly after building
-./dist/index.js file ./example.txt -o ./output
-```
-
-## Architecture
-
-The project follows a clean architecture pattern with clear separation of concerns:
-
-### Structure
 
 ```
 src/
-├── index.ts           # Main entry point (exports API + runs CLI)
-├── cli.ts             # CLI interface and command handling
-├── api.ts             # Core API layer with business logic
-└── utils/
-    ├── fileReader.ts  # File reading utilities
-    ├── idParser.ts    # ID parsing and validation
-    ├── pdfGenerator.ts # PDF generation with styling
-    └── enturApi.ts    # Entur API integration
+├── api.ts, cli.ts, index.ts
+└── utils/  fileReader, idParser, nsrId, assets, fontLoader, pdfGenerator, enturApi
+assets/
+├── fonts/   bundled Poppins TTFs
+└── images/  transport-mode icons, default logo
 ```
 
-### Design Principles
+## Migrating to 1.1.0
 
-- **Separation of Concerns**: CLI and API layers are completely separate
-- **Clean API**: Programmatic access independent of CLI
-- **Type Safety**: Full TypeScript support with exported types
-- **Error Handling**: Comprehensive error handling with user-friendly messages
-- **Customization**: Flexible styling options for different use cases
-- **Backward Compatibility**: All existing functionality preserved
+Backward-compatible minor release:
 
-### Key Features
-
-- **Dual Interface**: Both CLI tool and programmatic API
-- **Custom Styling**: Configurable colors, logos, and branding
-- **Format Support**: A4, A3, and Letter PDF formats
-- **Smart Filenames**: Output files include slugified stop place names for easy identification
-- **Validation**: NSR ID format validation
-- **Batch Processing**: Handle multiple IDs efficiently
-- **Error Recovery**: Graceful handling of missing logos and invalid data
-- **Development Tools**: Hot reload, watch mode, and TypeScript support
-
-## Output Files
-
-### Filename Format
-
-Generated PDF files use a smart naming convention that includes both the NSR ID and the slugified stop place name:
-
-**Format**: `{NSR_ID}-{slugified-stop-place-name}.pdf`
-
-**Examples**:
-
-- `NSR_StopPlace_39598-malmefjorden.pdf` (Malmefjorden)
-- `NSR_StopPlace_58735-molde-ferjekai.pdf` (Molde ferjekai)
-- `NSR_StopPlace_58062-aalesund-kystrutekai.pdf` (Ålesund kystrutekai)
-- `NSR_StopPlace_40308-alexandraparken.pdf` (Alexandraparken)
-
-### Slugification Rules
-
-Stop place names are converted to URL-friendly slugs using these rules:
-
-- **Lowercase conversion**: All characters converted to lowercase
-- **Norwegian characters**: `æ→ae`, `ø→o`, `å→aa`
-- **Accented characters**: `á→a`, `é→e`, `ñ→n`, etc.
-- **Spaces and special characters**: Replaced with hyphens (`-`)
-- **Length limit**: Truncated to 50 characters maximum
-- **Clean format**: Leading/trailing hyphens removed
-
-### Fallback Behavior
-
-If a stop place name is unavailable or cannot be retrieved:
-
-- Falls back to NSR ID only: `NSR_StopPlace_39598.pdf`
-- PDF generation continues normally
-- No errors thrown due to missing names
-
-## Error Handling
-
-The tool provides comprehensive error handling for common scenarios:
-
-### File Operations
-
-- File not found
-- Permission denied
-- Directory instead of file
-- Empty or invalid file content
-
-### ID Validation
-
-- Invalid NSR ID format
-- Missing or malformed IDs
-- Duplicate ID handling
-
-### PDF Generation
-
-- Missing logo files (graceful fallback)
-- Invalid style configuration
-- File system permissions
-- Network issues (Entur API)
-
-### API Integration
-
-- Entur API connectivity issues
-- Missing stop place information
-- Rate limiting and timeout handling
+- New optional options across all generation methods: `generateQrUrl`, `overwrite`, `onProgress`, `stopPlaceFetcher`, `enrichTransportMode`; `generateSinglePdf` also gained `name`/`transportMode`. Omitting them keeps prior behavior, including the prior QR URL.
+- `generateMultiplePdfs`'s first parameter is now `StopPlaceRequest[]` instead of `string[]` - a plain `string[]` still works unchanged.
+- `PdfGenerationResult` gained `generated`/`skipped`/`failed`; `generatedFiles`/`totalGenerated` are unchanged.
+- Package renamed to the scoped `@mrfylke/nsr-barcode-generator`.
+- `options.format` now actually controls page size (previously accepted but ignored - pages were always A4).
+- Fonts are bundled, no longer downloaded from GitHub at runtime.
+- Unresolvable stop-place metadata (no Entur match, no supplied `name`) is now a per-item error instead of silently falling back to the raw ID as the poster title.
 
 ## License
 

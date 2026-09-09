@@ -40,6 +40,10 @@ program
   .option("--logo-width <width>", "Logo width in pixels", parseInt)
   .option("--fallback-text <text>", "Fallback text if logo cannot be loaded")
   .option("--fallback-subtext <text>", "Additional fallback text (subtitle)")
+  .option(
+    "--overwrite",
+    "Replace existing output PDFs instead of skipping them"
+  )
   .description("Generate PDF files for unique IDs from an input file")
   .action(
     async (
@@ -53,6 +57,7 @@ program
         logoWidth?: number;
         fallbackText?: string;
         fallbackSubtext?: string;
+        overwrite?: boolean;
       }
     ) => {
       try {
@@ -118,6 +123,9 @@ program
         if (Object.keys(styleConfig).length > 0) {
           processOptions.style = styleConfig;
         }
+        if (options.overwrite) {
+          processOptions.overwrite = true;
+        }
 
         const result = await NsrBarcodeApi.processFile(processOptions);
 
@@ -160,6 +168,10 @@ program
   .option("--logo-width <width>", "Logo width in pixels", parseInt)
   .option("--fallback-text <text>", "Fallback text if logo cannot be loaded")
   .option("--fallback-subtext <text>", "Additional fallback text (subtitle)")
+  .option(
+    "--overwrite",
+    "Replace an existing output PDF instead of skipping it"
+  )
   .description("Generate PDF for a single NSR ID")
   .action(
     async (
@@ -173,6 +185,7 @@ program
         logoWidth?: number;
         fallbackText?: string;
         fallbackSubtext?: string;
+        overwrite?: boolean;
       }
     ) => {
       try {
@@ -238,6 +251,9 @@ program
         }
         if (Object.keys(styleConfig).length > 0) {
           generateOptions.style = styleConfig;
+        }
+        if (options.overwrite) {
+          generateOptions.overwrite = true;
         }
 
         const result = await NsrBarcodeApi.generateSinglePdf(generateOptions);

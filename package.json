@@ -1,12 +1,16 @@
 {
   "name": "@mrfylke/nsr-barcode-generator",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A CLI tool and programmatic API to generate PDF files for unique NSR IDs",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
     "nsr-barcode": "dist/index.js"
   },
+  "files": [
+    "dist",
+    "assets"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -25,7 +29,9 @@
     "start": "node dist/index.js",
     "watch": "tsc --watch",
     "clean": "rimraf dist",
-    "prepublishOnly": "pnpm run clean && pnpm run build"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "pnpm run clean && pnpm run build && pnpm run test"
   },
   "keywords": [
     "cli",
@@ -47,7 +53,8 @@
     "@types/xml2js": "^0.4.14",
     "rimraf": "^5.0.7",
     "tsx": "^4.15.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vitest": "^2.1.0"
   },
   "dependencies": {
     "axios": "^1.12.2",
