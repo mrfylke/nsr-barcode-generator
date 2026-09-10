@@ -12,6 +12,7 @@ import {
 } from "./utils/idParser";
 import { extractStopPlaceNumber, isValidNsrStopPlaceId } from "./utils/nsrId";
 import {
+  DataFetchingBatchProgressEvent,
   DataFetchingProgressEvent,
   GenerationProgressEvent,
   generatePdfsForStopPlaces,
@@ -168,173 +169,181 @@ function buildPdfOptions(
 }
 
 /**
- * Core API class for NSR barcode generation
+ * Validate NSR ID format
+ * @param nsrId - The NSR ID to validate
+ * @returns Validation result
  */
-export class NsrBarcodeApi {
-  /**
-   * Process a file containing NSR IDs and generate PDFs for all unique IDs
-   * @param options - File processing options
-   * @returns Promise that resolves to the processing result
-   */
-  static async processFile(
-    options: ProcessFileOptions,
-  ): Promise<ProcessFileResult> {
-    const { filePath, outputDirectory } = options;
-
-    try {
-      // Read and parse the file
-      const content = await readFile(filePath);
-      const parseResult = await parseUniqueIds(content);
-
-      // Validate all NSR IDs
-      const uniqueIdsArray = Array.from(parseResult.uniqueIds);
-      for (const nsrId of uniqueIdsArray) {
-        const validation = this.validateNsrId(nsrId);
-        if (!validation.isValid) {
-          throw new Error(`Invalid NSR ID "${nsrId}": ${validation.error}`);
-        }
-      }
-
-      // Generate PDFs for all unique IDs
-      const pdfOptions = buildPdfOptions(outputDirectory, options);
-      const pdfResult = await generatePdfsForStopPlaces(
-        uniqueIdsArray,
-        pdfOptions,
-      );
-
-      // Create summary
-      const parseSummary = formatIdCountResult(parseResult);
-      const pdfSummary = `Generated ${pdfResult.totalGenerated} PDF files in ${pdfResult.outputDirectory}`;
-      const summary = `${parseSummary}\n\n${pdfSummary}`;
-
-      return {
-        parseResult,
-        pdfResult,
-        summary,
-      };
-    } catch (error) {
-      if (error instanceof Error) {
-        throw error;
-      }
-      throw new Error("An unexpected error occurred during file processing");
-    }
+function validateNsrId(nsrId: string): ValidationResult {
+  if (!nsrId) {
+    return {
+      isValid: false,
+      error: "NSR ID cannot be empty",
+    };
   }
 
-  /**
-   * Generate a PDF for a single NSR ID
-   * @param options - Single PDF generation options
-   * @returns Promise that resolves to the generation result
-   */
-  static async generateSinglePdf(
-    options: GenerateSinglePdfOptions,
-  ): Promise<GenerateSinglePdfResult> {
-    const { nsrId, outputDirectory, name, transportMode } = options;
-
-    try {
-      // Validate the NSR ID format
-      const validation = this.validateNsrId(nsrId);
-      if (!validation.isValid) {
-        throw new Error(validation.error);
-      }
-
-      // Generate PDF. When `name` is supplied, skip Entur entirely for this ID.
-      const request: StopPlaceRequest = name
-        ? { id: nsrId, name, ...(transportMode ? { transportMode } : {}) }
-        : nsrId;
-      const pdfOptions = buildPdfOptions(outputDirectory, options);
-      const pdfResult = await generatePdfsForStopPlaces([request], pdfOptions);
-
-      const success =
-        pdfResult.totalGenerated > 0 || pdfResult.skipped.length > 0;
-      const summary = success
-        ? `Successfully generated PDF for ${nsrId} in ${pdfResult.outputDirectory}`
-        : `Failed to generate PDF for ${nsrId}`;
-
-      return {
-        pdfResult,
-        success,
-        summary,
-      };
-    } catch (error) {
-      if (error instanceof Error) {
-        throw error;
-      }
-      throw new Error("An unexpected error occurred during PDF generation");
-    }
+  if (!isValidNsrStopPlaceId(nsrId)) {
+    return {
+      isValid: false,
+      error:
+        "Invalid NSR ID format. Expected format: NSR:StopPlace:<digits> with no extra whitespace or characters",
+    };
   }
 
-  /**
-   * Generate PDFs for multiple stop places. Each entry is either a bare NSR
-   * ID (resolved via Entur) or a {@link StopPlaceInput} object carrying
-   * already-known metadata (Entur is never queried for that ID). Mixing the
-   * two forms in a single array is supported. If an ID appears more than
-   * once, the last entry for that ID wins.
-   * @param stopPlaces - Array of NSR IDs and/or known stop-place data
-   * @param options - PDF generation options
-   * @returns Promise that resolves to the generation result
-   */
-  static async generateMultiplePdfs(
-    stopPlaces: StopPlaceRequest[],
-    options: PdfGenerationOptions,
-  ): Promise<PdfGenerationResult> {
+  return { isValid: true };
+}
+
+/**
+ * Process a file containing NSR IDs and generate PDFs for all unique IDs
+ * @param options - File processing options
+ * @returns Promise that resolves to the processing result
+ */
+async function processFile(
+  options: ProcessFileOptions,
+): Promise<ProcessFileResult> {
+  const { filePath, outputDirectory } = options;
+
+  try {
+    // Read and parse the file
+    const content = await readFile(filePath);
+    const parseResult = await parseUniqueIds(content);
+
     // Validate all NSR IDs
-    for (const request of stopPlaces) {
-      const nsrId = typeof request === "string" ? request : request.id;
-      const validation = this.validateNsrId(nsrId);
+    const uniqueIdsArray = Array.from(parseResult.uniqueIds);
+    for (const nsrId of uniqueIdsArray) {
+      const validation = validateNsrId(nsrId);
       if (!validation.isValid) {
         throw new Error(`Invalid NSR ID "${nsrId}": ${validation.error}`);
       }
     }
 
-    return generatePdfsForStopPlaces(stopPlaces, options);
-  }
+    // Generate PDFs for all unique IDs
+    const pdfOptions = buildPdfOptions(outputDirectory, options);
+    const pdfResult = await generatePdfsForStopPlaces(
+      uniqueIdsArray,
+      pdfOptions,
+    );
 
-  /**
-   * Validate NSR ID format
-   * @param nsrId - The NSR ID to validate
-   * @returns Validation result
-   */
-  static validateNsrId(nsrId: string): ValidationResult {
-    if (!nsrId) {
-      return {
-        isValid: false,
-        error: "NSR ID cannot be empty",
-      };
+    // Create summary
+    const parseSummary = formatIdCountResult(parseResult);
+    const pdfSummary = `Generated ${pdfResult.totalGenerated} PDF files in ${pdfResult.outputDirectory}`;
+    const summary = `${parseSummary}\n\n${pdfSummary}`;
+
+    return {
+      parseResult,
+      pdfResult,
+      summary,
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
     }
-
-    if (!isValidNsrStopPlaceId(nsrId)) {
-      return {
-        isValid: false,
-        error:
-          "Invalid NSR ID format. Expected format: NSR:StopPlace:<digits> with no extra whitespace or characters",
-      };
-    }
-
-    return { isValid: true };
-  }
-
-  /**
-   * Parse and validate IDs from file content without generating PDFs
-   * @param content - File content to parse
-   * @returns Promise that resolves to the parse result
-   */
-  static async parseIds(content: string): Promise<IdParseResult> {
-    return parseUniqueIds(content);
-  }
-
-  /**
-   * Parse and validate IDs from a file without generating PDFs
-   * @param filePath - Path to the file to parse
-   * @returns Promise that resolves to the parse result
-   */
-  static async parseIdsFromFile(filePath: string): Promise<IdParseResult> {
-    const content = await readFile(filePath);
-    return parseUniqueIds(content);
+    throw new Error("An unexpected error occurred during file processing");
   }
 }
 
+/**
+ * Generate a PDF for a single NSR ID
+ * @param options - Single PDF generation options
+ * @returns Promise that resolves to the generation result
+ */
+async function generateSinglePdf(
+  options: GenerateSinglePdfOptions,
+): Promise<GenerateSinglePdfResult> {
+  const { nsrId, outputDirectory, name, transportMode } = options;
+
+  try {
+    // Validate the NSR ID format
+    const validation = validateNsrId(nsrId);
+    if (!validation.isValid) {
+      throw new Error(validation.error);
+    }
+
+    // Generate PDF. When `name` is supplied, skip Entur entirely for this ID.
+    const request: StopPlaceRequest = name
+      ? { id: nsrId, name, ...(transportMode ? { transportMode } : {}) }
+      : nsrId;
+    const pdfOptions = buildPdfOptions(outputDirectory, options);
+    const pdfResult = await generatePdfsForStopPlaces([request], pdfOptions);
+
+    const success =
+      pdfResult.totalGenerated > 0 || pdfResult.skipped.length > 0;
+    const summary = success
+      ? `Successfully generated PDF for ${nsrId} in ${pdfResult.outputDirectory}`
+      : `Failed to generate PDF for ${nsrId}`;
+
+    return {
+      pdfResult,
+      success,
+      summary,
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error("An unexpected error occurred during PDF generation");
+  }
+}
+
+/**
+ * Generate PDFs for multiple stop places. Each entry is either a bare NSR
+ * ID (resolved via Entur) or a {@link StopPlaceInput} object carrying
+ * already-known metadata (Entur is never queried for that ID). Mixing the
+ * two forms in a single array is supported. If an ID appears more than
+ * once, the last entry for that ID wins.
+ * @param stopPlaces - Array of NSR IDs and/or known stop-place data
+ * @param options - PDF generation options
+ * @returns Promise that resolves to the generation result
+ */
+async function generateMultiplePdfs(
+  stopPlaces: StopPlaceRequest[],
+  options: PdfGenerationOptions,
+): Promise<PdfGenerationResult> {
+  // Validate all NSR IDs
+  for (const request of stopPlaces) {
+    const nsrId = typeof request === "string" ? request : request.id;
+    const validation = validateNsrId(nsrId);
+    if (!validation.isValid) {
+      throw new Error(`Invalid NSR ID "${nsrId}": ${validation.error}`);
+    }
+  }
+
+  return generatePdfsForStopPlaces(stopPlaces, options);
+}
+
+/**
+ * Parse and validate IDs from file content without generating PDFs
+ * @param content - File content to parse
+ * @returns Promise that resolves to the parse result
+ */
+async function parseIds(content: string): Promise<IdParseResult> {
+  return parseUniqueIds(content);
+}
+
+/**
+ * Parse and validate IDs from a file without generating PDFs
+ * @param filePath - Path to the file to parse
+ * @returns Promise that resolves to the parse result
+ */
+async function parseIdsFromFile(filePath: string): Promise<IdParseResult> {
+  const content = await readFile(filePath);
+  return parseUniqueIds(content);
+}
+
+/**
+ * Core API for NSR barcode generation
+ */
+export const NsrBarcodeApi = {
+  processFile,
+  generateSinglePdf,
+  generateMultiplePdfs,
+  validateNsrId,
+  parseIds,
+  parseIdsFromFile,
+};
+
 // Export types and errors for external use
 export {
+  DataFetchingBatchProgressEvent,
   DataFetchingProgressEvent,
   extractStopPlaceNumber,
   formatIdCountResult,

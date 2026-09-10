@@ -13,7 +13,7 @@ const NSR_STOP_PLACE_PATTERN = /^NSR:StopPlace:([0-9]+)$/;
  */
 export function extractStopPlaceNumber(nsrId: string): string | null {
   const match = NSR_STOP_PLACE_PATTERN.exec(nsrId);
-  return match ? match[1]! : null;
+  return match?.[1] ?? null;
 }
 
 /**

@@ -32,6 +32,26 @@ export interface RetryConfig {
 }
 
 /**
+ * Shape of the XML-parsed stop place response, as produced by xml2js.
+ * Text-bearing elements come through either as a bare string or as an
+ * object carrying the text under `value` (depending on attributes present).
+ */
+interface RawStopPlaceResponse {
+  name?: string | { value: string };
+  description?: string | { value: string };
+  transportMode?: string | string[];
+  centroid?: {
+    location?: {
+      latitude?: number;
+      longitude?: number;
+    };
+  };
+  topographicPlaceRef?: {
+    ref?: string;
+  };
+}
+
+/**
  * Per-item progress event emitted while {@link EnturApiClient.getMultipleStopPlaces}
  * fetches stop place metadata.
  */
@@ -41,6 +61,17 @@ export interface StopPlaceFetchProgressEvent {
   nsrId: string;
   status: "fetched" | "error";
   error?: string;
+}
+
+/**
+ * Emitted once per batch by {@link EnturApiClient.getMultipleStopPlaces} after
+ * a batch finishes, right before it waits `delayMs` before starting the next
+ * one (not emitted after the last batch, since there is no wait).
+ */
+export interface StopPlaceBatchProgressEvent {
+  batchNumber: number;
+  totalBatches: number;
+  delayMs: number;
 }
 
 /**
@@ -254,6 +285,8 @@ export class EnturApiClient {
       concurrency?: number;
       /** Called once per ID as its metadata fetch completes (success or failure). */
       onProgress?: (event: StopPlaceFetchProgressEvent) => void;
+      /** Called once per batch after it finishes, before the delay to the next one. */
+      onBatchComplete?: (event: StopPlaceBatchProgressEvent) => void;
     } = {},
   ): Promise<(StopPlaceInfo | null)[]> {
     const {
@@ -261,6 +294,7 @@ export class EnturApiClient {
       delayBetweenBatches = 1000,
       concurrency = 5,
       onProgress,
+      onBatchComplete,
     } = options;
 
     const results: (StopPlaceInfo | null)[] = [];
@@ -294,11 +328,11 @@ export class EnturApiClient {
 
       // Add delay between batches (except for the last batch)
       if (i + batchSize < stopPlaceIds.length) {
-        console.log(
-          `Processed batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(
-            stopPlaceIds.length / batchSize,
-          )}. Waiting ${delayBetweenBatches}ms before next batch...`,
-        );
+        onBatchComplete?.({
+          batchNumber: Math.floor(i / batchSize) + 1,
+          totalBatches: Math.ceil(stopPlaceIds.length / batchSize),
+          delayMs: delayBetweenBatches,
+        });
         await this.sleep(delayBetweenBatches);
       }
     }
@@ -361,7 +395,10 @@ export class EnturApiClient {
    * @param originalId - Original ID for fallback
    * @returns Parsed stop place information
    */
-  private parseStopPlaceResponse(data: any, originalId: string): StopPlaceInfo {
+  private parseStopPlaceResponse(
+    data: RawStopPlaceResponse | undefined,
+    originalId: string,
+  ): StopPlaceInfo {
     const stopPlace: StopPlaceInfo = {
       id: originalId,
     };
@@ -369,17 +406,17 @@ export class EnturApiClient {
     try {
       if (data) {
         // Extract name
-        if (data.name?.value) {
-          stopPlace.name = data.name.value;
-        } else if (typeof data.name === "string") {
+        if (typeof data.name === "string") {
           stopPlace.name = data.name;
+        } else if (data.name?.value) {
+          stopPlace.name = data.name.value;
         }
 
         // Extract description
-        if (data.description?.value) {
-          stopPlace.description = data.description.value;
-        } else if (typeof data.description === "string") {
+        if (typeof data.description === "string") {
           stopPlace.description = data.description;
+        } else if (data.description?.value) {
+          stopPlace.description = data.description.value;
         }
 
         // Extract transport modes

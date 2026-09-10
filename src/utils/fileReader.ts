@@ -1,5 +1,5 @@
-import { promises as fs } from "fs";
-import { resolve } from "path";
+import { promises as fs } from "node:fs";
+import { resolve } from "node:path";
 
 /**
  * Reads the contents of a file and returns it as a string

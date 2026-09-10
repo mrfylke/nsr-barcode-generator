@@ -1,10 +1,11 @@
-import { createWriteStream, promises as fs } from "fs";
-import { join, resolve } from "path";
+import { createWriteStream, promises as fs } from "node:fs";
+import { join, resolve } from "node:path";
 import PDFDocument from "pdfkit";
 import * as QRCode from "qrcode";
 import { resolveAssetPath } from "./assets";
 import {
   enturApi,
+  type StopPlaceBatchProgressEvent,
   type StopPlaceFetchProgressEvent,
   type StopPlaceInfo,
 } from "./enturApi";
@@ -48,6 +49,17 @@ export interface DataFetchingProgressEvent {
 }
 
 /**
+ * Emitted once per batch while stop place metadata is being fetched from
+ * Entur, after a batch finishes and before the wait ahead of the next one.
+ */
+export interface DataFetchingBatchProgressEvent {
+  type: "data-fetching-batch";
+  batchNumber: number;
+  totalBatches: number;
+  delayMs: number;
+}
+
+/**
  * Per-item progress event emitted as each requested PDF is generated.
  */
 export interface GenerationProgressEvent {
@@ -63,10 +75,12 @@ export interface GenerationProgressEvent {
 /**
  * Progress event emitted during batch PDF generation, distinguished by
  * `type` - `"data-fetching"` while stop place metadata is being resolved
- * from Entur, `"generation"` while PDFs are being written.
+ * from Entur, `"data-fetching-batch"` between fetch batches, `"generation"`
+ * while PDFs are being written.
  */
 export type PdfProgressEvent =
   | DataFetchingProgressEvent
+  | DataFetchingBatchProgressEvent
   | GenerationProgressEvent;
 
 /**
@@ -232,6 +246,13 @@ export async function generatePdfsForStopPlaces(
                     status: event.status,
                     ...(event.error ? { error: event.error } : {}),
                   }),
+                onBatchComplete: (event: StopPlaceBatchProgressEvent) =>
+                  onProgress({
+                    type: "data-fetching-batch",
+                    batchNumber: event.batchNumber,
+                    totalBatches: event.totalBatches,
+                    delayMs: event.delayMs,
+                  }),
               }
             : {}),
         }));
@@ -352,545 +373,539 @@ async function generateSinglePdf(
   stopPlaceInfo: StopPlaceInfo,
   options?: PdfGenerationOptions,
 ): Promise<void> {
-  return new Promise(async (resolvePromise, reject) => {
+  let stream: ReturnType<typeof createWriteStream>;
+
+  try {
+    // Load Poppins fonts
+    const fonts = await fontLoader.loadPoppins(options?.assetsDirectory);
+
+    // Get orientation (default to landscape for backward compatibility)
+    const orientation = options?.orientation || "landscape";
+    const format = options?.format || "A4";
+
+    // Create a new PDF document with specified format/orientation
+    const doc = new PDFDocument({
+      size: format,
+      layout: orientation,
+      margins: {
+        top: 50,
+        bottom: 50,
+        left: 50,
+        right: 50,
+      },
+    });
+
+    // Register Poppins fonts with PDFKit
+    let poppinsRegular = "Helvetica"; // Fallback
+    let poppinsBold = "Helvetica-Bold"; // Fallback
+
     try {
-      // Load Poppins fonts
-      const fonts = await fontLoader.loadPoppins(options?.assetsDirectory);
-
-      // Get orientation (default to landscape for backward compatibility)
-      const orientation = options?.orientation || "landscape";
-      const format = options?.format || "A4";
-
-      // Create a new PDF document with specified format/orientation
-      const doc = new PDFDocument({
-        size: format,
-        layout: orientation,
-        margins: {
-          top: 50,
-          bottom: 50,
-          left: 50,
-          right: 50,
-        },
-      });
-
-      // Register Poppins fonts with PDFKit
-      let poppinsRegular = "Helvetica"; // Fallback
-      let poppinsBold = "Helvetica-Bold"; // Fallback
-
-      try {
-        if (fonts.regular !== "Helvetica") {
-          doc.registerFont("Poppins-Regular", fonts.regular);
-          poppinsRegular = "Poppins-Regular";
-        }
-        if (fonts.bold !== "Helvetica-Bold") {
-          doc.registerFont("Poppins-Bold", fonts.bold);
-          poppinsBold = "Poppins-Bold";
-        }
-      } catch (fontError) {
-        console.warn(
-          "Failed to register Poppins fonts, using fallback:",
-          fontError,
-        );
+      if (fonts.regular !== "Helvetica") {
+        doc.registerFont("Poppins-Regular", fonts.regular);
+        poppinsRegular = "Poppins-Regular";
       }
-
-      // Create write stream
-      const stream = createWriteStream(outputPath);
-      doc.pipe(stream);
-
-      // Get page dimensions
-      const pageWidth = doc.page.width;
-      const pageHeight = doc.page.height;
-
-      // Get style configuration with defaults
-      const styleConfig = options?.style || {};
-      const headerFooterColor = styleConfig.headerFooterColor || "#1A4D75"; // Default FRAM blue
-      const logoPath =
-        styleConfig.logoPath ||
-        resolveAssetPath(
-          options?.assetsDirectory,
-          "images",
-          "fram_mor_fylkeskommune_dark.png",
-        );
-      const logoWidth = styleConfig.logoWidth || 105;
-      const fallbackLogoText = styleConfig.fallbackLogoText || "FRAM";
-      const fallbackLogoSubtext =
-        styleConfig.fallbackLogoSubtext || "Møre og Romsdal fylkeskommune";
-
-      // Define colors
-      const white = "#FFFFFF";
-      const darkGray = "#333333";
-
-      // Add rounded border box around entire content
-      const borderRadius = 15;
-      const borderMargin = 20;
-      const boxWidth = pageWidth - borderMargin * 2;
-      const boxHeight = pageHeight - borderMargin * 2;
-
-      doc
-        .lineWidth(0.25)
-        .roundedRect(
-          borderMargin,
-          borderMargin,
-          boxWidth,
-          boxHeight,
-          borderRadius,
-        )
-        .stroke("#000000");
-
-      // Header section (blue background) - clipped to border box
-      const headerHeight = 80;
-      doc
-        .save()
-        .roundedRect(
-          borderMargin,
-          borderMargin,
-          boxWidth,
-          boxHeight,
-          borderRadius,
-        )
-        .clip()
-        .rect(borderMargin, borderMargin, boxWidth, headerHeight)
-        .fill(headerFooterColor)
-        .restore();
-
-      // Add transport mode specific icon
-      const iconX = 80;
-      const iconY = 60;
-      const iconSize = 50;
-
-      try {
-        // Determine icon based on transport mode
-        const transportModes = stopPlaceInfo.transportMode || [];
-        let iconFileName = "Bus.png"; // Default to bus
-
-        // Check each transport mode (can be string or array of strings)
-        const modes = Array.isArray(transportModes)
-          ? transportModes
-          : [transportModes];
-        const modeString = modes.join(" ").toLowerCase();
-
-        if (modeString.includes("water") || modeString.includes("boat")) {
-          iconFileName = "Boat.png";
-        } else if (modeString.includes("ferry")) {
-          iconFileName = "Ferry.png";
-        } else if (modeString.includes("bus")) {
-          iconFileName = "Bus.png";
-        }
-
-        const iconPath = resolveAssetPath(
-          options?.assetsDirectory,
-          "images",
-          iconFileName,
-        );
-        const iconBuffer = await fs.readFile(iconPath);
-
-        // Add white circular background
-        doc
-          .lineWidth(3)
-          .circle(iconX, iconY, iconSize / 2)
-          .stroke(white)
-          .circle(iconX, iconY, iconSize / 2)
-          .stroke(white);
-
-        // Add the transport mode icon
-        const iconImageSize = iconSize * 0.6; // Make icon slightly smaller than circle
-        const iconImageX = iconX - iconImageSize / 2;
-        const iconImageY = iconY - iconImageSize / 2;
-
-        doc.image(iconBuffer, iconImageX, iconImageY, {
-          width: iconImageSize,
-          height: iconImageSize,
-        });
-      } catch (error) {
-        console.warn("Could not load transport mode icon:", error);
-        // Fallback to simple circle with text
-        doc
-          .lineWidth(3)
-          .circle(iconX, iconY, iconSize / 2)
-          .stroke(white);
-
-        // Add fallback icon text
-        doc
-          .fillColor(white)
-          .fontSize(20)
-          .font(poppinsBold)
-          .text("x", iconX - 10, iconY - 10);
+      if (fonts.bold !== "Helvetica-Bold") {
+        doc.registerFont("Poppins-Bold", fonts.bold);
+        poppinsBold = "Poppins-Bold";
       }
-
-      // Add stop name in header
-      const stopName = stopPlaceInfo.name || id;
-      doc
-        .fillColor(white)
-        .fontSize(36)
-        .font(poppinsBold)
-        .text(stopName, 130, 35, {
-          width: pageWidth - 200,
-          align: "left",
-        });
-
-      // Main content area - centered vertically (adjust for orientation)
-      const footerHeight = 80;
-      const availableHeight = pageHeight - headerHeight - footerHeight;
-      const contentHeight = orientation === "portrait" ? 400 : 310; // More vertical space needed for portrait
-      const contentY = headerHeight + (availableHeight - contentHeight) / 2;
-
-      // Determine the QR code payload
-      let qrUrl: string;
-      if (options?.generateQrUrl) {
-        const qrContext: StopPlaceQrContext = {
-          id,
-          name: stopPlaceInfo.name ?? id,
-        };
-        const candidate = options.generateQrUrl(qrContext);
-        if (!isValidAbsoluteHttpUrl(candidate)) {
-          throw new Error(
-            `generateQrUrl returned an invalid URL for "${id}": ${JSON.stringify(
-              candidate,
-            )}. Expected a non-empty absolute http(s) URL.`,
-          );
-        }
-        qrUrl = candidate;
-      } else {
-        qrUrl = `https://reise.frammr.no/departures/${encodeURIComponent(
-          id,
-        )}?qr`;
-      }
-
-      const qrCodeDataURL = await QRCode.toDataURL(qrUrl, {
-        width: 200,
-        margin: 1,
-        color: {
-          dark: "#000000",
-          light: "#FFFFFF",
-        },
-      });
-
-      const base64Data = qrCodeDataURL.split(",")[1];
-      let qrCodeBuffer: Buffer | null = null;
-      if (base64Data) {
-        qrCodeBuffer = Buffer.from(base64Data, "base64");
-      }
-
-      if (orientation === "portrait") {
-        // Portrait layout: QR code in left column, right column text from landscape
-        const qrSize = 120;
-        const topMargin = headerHeight + 20; // Right under header with small margin
-        const qrX = iconX - iconSize / 2; // Same X position as landscape QR code
-        const qrY = topMargin; // Move to top under header
-
-        // Add QR code on the left
-        if (qrCodeBuffer) {
-          doc.image(qrCodeBuffer, qrX, qrY, { width: qrSize, height: qrSize });
-        }
-
-        // Right column text - exactly the same as landscape right column
-        const rightColumnX = pageWidth - 350; // Increased width by 30 points
-        const rightColumnStartY = topMargin; // Same Y position as QR code, under header
-
-        // Norwegian section (from landscape middle column)
-        doc
-          .fillColor(darkGray)
-          .fontSize(24)
-          .font(poppinsBold)
-          .text("Når kjem bussen?", rightColumnX, rightColumnStartY);
-
-        doc
-          .fillColor(darkGray)
-          .fontSize(14)
-          .font(poppinsRegular)
-          .text(
-            "Opne mobilkameraet ditt og hald",
-            rightColumnX,
-            rightColumnStartY + 40,
-          )
-          .text(
-            "kameralinsa over QR-koden. Lenka",
-            rightColumnX,
-            rightColumnStartY + 60,
-          )
-          .text(
-            "fører deg til reiseplanleggaren, og viser",
-            rightColumnX,
-            rightColumnStartY + 80,
-          )
-          .text(
-            "busslinjer og avgangar frå haldeplassen",
-            rightColumnX,
-            rightColumnStartY + 100,
-          )
-          .text("du står på.", rightColumnX, rightColumnStartY + 120);
-
-        // English section (moved to be right after Norwegian section)
-        const englishStartY = rightColumnStartY + 160;
-        doc
-          .fillColor(darkGray)
-          .fontSize(24)
-          .font(poppinsBold)
-          .text("When will the bus", rightColumnX, englishStartY)
-          .text("arrive?", rightColumnX, englishStartY + 25);
-
-        doc
-          .fillColor(darkGray)
-          .fontSize(14)
-          .font(poppinsRegular)
-          .text(
-            "Open your mobile camera and hold",
-            rightColumnX,
-            englishStartY + 60,
-          )
-          .text(
-            "camera lens over the QR code. The link",
-            rightColumnX,
-            englishStartY + 80,
-          )
-          .text(
-            "takes you to the travel planner, and",
-            rightColumnX,
-            englishStartY + 100,
-          )
-          .text(
-            "shows bus lines and departures from the",
-            rightColumnX,
-            englishStartY + 120,
-          )
-          .text("stop you are at.", rightColumnX, englishStartY + 140);
-
-        // Info section (moved to be at the end)
-        const infoStartY = englishStartY + 180;
-        doc
-          .fillColor(darkGray)
-          .fontSize(14)
-          .font(poppinsBold)
-          .text("Informasjon om bussavgangar", rightColumnX, infoStartY)
-          .text("finn du också:", rightColumnX, infoStartY + 20);
-
-        doc
-          .fillColor(darkGray)
-          .fontSize(14)
-          .font(poppinsRegular)
-          .text(
-            "Information about bus departures",
-            rightColumnX,
-            infoStartY + 40,
-          )
-          .text("can also be found:", rightColumnX, infoStartY + 60);
-
-        doc
-          .fillColor(darkGray)
-          .fontSize(14)
-          .font(poppinsRegular)
-          .text("• I appane / in the apps:", rightColumnX, infoStartY + 100);
-
-        doc
-          .font(poppinsBold)
-          .text("FRAM / Entur", rightColumnX + 10, infoStartY + 120);
-
-        doc
-          .font(poppinsRegular)
-          .text(
-            "• På nettsidene / on the websites:",
-            rightColumnX,
-            infoStartY + 155,
-          );
-
-        doc
-          .font(poppinsBold)
-          .text("frammr.no / entur.no", rightColumnX + 10, infoStartY + 175);
-      } else {
-        const qrSize = 120;
-        const qrX = iconX - iconSize / 2; // Align QR code left edge with left edge of circular icon
-        const qrY = contentY;
-
-        // Add QR code
-        if (qrCodeBuffer) {
-          doc.image(qrCodeBuffer, qrX, qrY, { width: qrSize, height: qrSize });
-        }
-
-        // Text content (center and right)
-        const textStartX = qrX + qrSize + 20; // Text starts after the QR code with some padding
-        const rightColumnX = pageWidth - 320; // Right column remains in the same position
-
-        // Norwegian section
-        doc
-          .fillColor(darkGray)
-          .fontSize(24)
-          .font(poppinsBold)
-          .text("Når kjem bussen?", textStartX, contentY);
-
-        doc
-          .fillColor(darkGray)
-          .fontSize(14)
-          .font(poppinsRegular)
-          .text("Opne mobilkameraet ditt og hald", textStartX, contentY + 40)
-          .text("kameralinsa over QR-koden. Lenka", textStartX, contentY + 60)
-          .text(
-            "fører deg til reiseplanleggaren, og viser",
-            textStartX,
-            contentY + 80,
-          )
-          .text(
-            "busslinjer og avgangar frå haldeplassen",
-            textStartX,
-            contentY + 100,
-          )
-          .text("du står på.", textStartX, contentY + 120);
-
-        // English section
-        doc
-          .fillColor(darkGray)
-          .fontSize(24)
-          .font(poppinsBold)
-          .text("When will the bus", textStartX, contentY + 160)
-          .text("arrive?", textStartX, contentY + 185);
-
-        doc
-          .fillColor(darkGray)
-          .fontSize(14)
-          .font(poppinsRegular)
-          .text("Open your mobile camera and hold", textStartX, contentY + 220)
-          .text(
-            "camera lens over the QR code. The link",
-            textStartX,
-            contentY + 240,
-          )
-          .text(
-            "takes you to the travel planner, and",
-            textStartX,
-            contentY + 260,
-          )
-          .text(
-            "shows bus lines and departures from the",
-            textStartX,
-            contentY + 280,
-          )
-          .text("stop you are at.", textStartX, contentY + 300);
-
-        // Add vertical line separating center and right columns
-        const separatorX = rightColumnX - 22;
-        doc
-          .lineWidth(0.25)
-          .moveTo(separatorX, contentY)
-          .lineTo(separatorX, contentY + 320)
-          .stroke("#000000");
-
-        // Right column - Additional info (aligned with "Opne mobilkameraet ditt ...")
-        const rightColumnStartY = contentY + 40;
-
-        doc
-          .fillColor(darkGray)
-          .fontSize(14)
-          .font(poppinsBold)
-          .text("Informasjon om bussavgangar", rightColumnX, rightColumnStartY)
-          .text("finn du også:", rightColumnX, rightColumnStartY + 20);
-
-        doc
-          .fillColor(darkGray)
-          .fontSize(14)
-          .font(poppinsRegular)
-          .text(
-            "Information about bus departures",
-            rightColumnX,
-            rightColumnStartY + 40,
-          )
-          .text("can also be found:", rightColumnX, rightColumnStartY + 60);
-
-        doc
-          .fillColor(darkGray)
-          .fontSize(14)
-          .font(poppinsRegular)
-          .text(
-            "• I appane / in the apps:",
-            rightColumnX,
-            rightColumnStartY + 100,
-          );
-
-        doc
-          .font(poppinsBold)
-          .text("FRAM / Entur", rightColumnX + 10, rightColumnStartY + 120);
-
-        doc
-          .font(poppinsRegular)
-          .text(
-            "• På nettsidene / on the websites:",
-            rightColumnX,
-            rightColumnStartY + 155,
-          );
-
-        doc
-          .font(poppinsBold)
-          .text(
-            "frammr.no / entur.no",
-            rightColumnX + 10,
-            rightColumnStartY + 175,
-          );
-      }
-
-      // Footer with FRAM logo area - clipped to border box
-      const footerY = pageHeight - footerHeight;
-      doc
-        .save()
-        .roundedRect(
-          borderMargin,
-          borderMargin,
-          boxWidth,
-          boxHeight,
-          borderRadius,
-        )
-        .clip()
-        .rect(borderMargin, footerY, boxWidth, footerHeight)
-        .fill(headerFooterColor)
-        .restore();
-
-      // Add logo in lower right corner
-      try {
-        const logoBuffer = await fs.readFile(logoPath);
-
-        // Position logo in lower right corner of footer with some margin
-        const logoHeight = Math.round(logoWidth * 0.27); // Maintain aspect ratio (approximately 3.75:1)
-        const logoX = pageWidth - borderMargin - logoWidth - 20; // 20px margin from right edge
-        const logoY = footerY + footerHeight - logoHeight - 35; // 35px margin from bottom
-
-        doc.image(logoBuffer, logoX, logoY, {
-          width: logoWidth,
-          height: logoHeight,
-        });
-      } catch (error) {
-        console.warn("Could not load logo image:", error);
-        // Fallback to text logo if image fails to load
-        doc
-          .fillColor(white)
-          .fontSize(24)
-          .font(poppinsBold)
-          .text(fallbackLogoText, pageWidth - 150, footerY + 25);
-
-        if (fallbackLogoSubtext) {
-          doc
-            .fillColor(white)
-            .fontSize(10)
-            .font(poppinsRegular)
-            .text(fallbackLogoSubtext, pageWidth - 220, footerY + 55);
-        }
-      }
-
-      // Finalize the PDF
-      doc.end();
-
-      stream.on("finish", () => {
-        resolvePromise();
-      });
-
-      stream.on("error", (error) => {
-        reject(new Error(`Failed to write PDF: ${error.message}`));
-      });
-    } catch (error) {
-      reject(
-        new Error(
-          `PDF generation failed: ${
-            error instanceof Error ? error.message : "Unknown error"
-          }`,
-        ),
+    } catch (fontError) {
+      console.warn(
+        "Failed to register Poppins fonts, using fallback:",
+        fontError,
       );
     }
+
+    // Create write stream
+    stream = createWriteStream(outputPath);
+    doc.pipe(stream);
+
+    // Get page dimensions
+    const pageWidth = doc.page.width;
+    const pageHeight = doc.page.height;
+
+    // Get style configuration with defaults
+    const styleConfig = options?.style || {};
+    const headerFooterColor = styleConfig.headerFooterColor || "#1A4D75"; // Default FRAM blue
+    const logoPath =
+      styleConfig.logoPath ||
+      resolveAssetPath(
+        options?.assetsDirectory,
+        "images",
+        "fram_mor_fylkeskommune_dark.png",
+      );
+    const logoWidth = styleConfig.logoWidth || 105;
+    const fallbackLogoText = styleConfig.fallbackLogoText || "FRAM";
+    const fallbackLogoSubtext =
+      styleConfig.fallbackLogoSubtext || "Møre og Romsdal fylkeskommune";
+
+    // Define colors
+    const white = "#FFFFFF";
+    const darkGray = "#333333";
+
+    // Add rounded border box around entire content
+    const borderRadius = 15;
+    const borderMargin = 20;
+    const boxWidth = pageWidth - borderMargin * 2;
+    const boxHeight = pageHeight - borderMargin * 2;
+
+    doc
+      .lineWidth(0.25)
+      .roundedRect(
+        borderMargin,
+        borderMargin,
+        boxWidth,
+        boxHeight,
+        borderRadius,
+      )
+      .stroke("#000000");
+
+    // Header section (blue background) - clipped to border box
+    const headerHeight = 80;
+    doc
+      .save()
+      .roundedRect(
+        borderMargin,
+        borderMargin,
+        boxWidth,
+        boxHeight,
+        borderRadius,
+      )
+      .clip()
+      .rect(borderMargin, borderMargin, boxWidth, headerHeight)
+      .fill(headerFooterColor)
+      .restore();
+
+    // Add transport mode specific icon
+    const iconX = 80;
+    const iconY = 60;
+    const iconSize = 50;
+
+    try {
+      // Determine icon based on transport mode
+      const transportModes = stopPlaceInfo.transportMode || [];
+      let iconFileName = "Bus.png"; // Default to bus
+
+      // Check each transport mode (can be string or array of strings)
+      const modes = Array.isArray(transportModes)
+        ? transportModes
+        : [transportModes];
+      const modeString = modes.join(" ").toLowerCase();
+
+      if (modeString.includes("water") || modeString.includes("boat")) {
+        iconFileName = "Boat.png";
+      } else if (modeString.includes("ferry")) {
+        iconFileName = "Ferry.png";
+      } else if (modeString.includes("bus")) {
+        iconFileName = "Bus.png";
+      }
+
+      const iconPath = resolveAssetPath(
+        options?.assetsDirectory,
+        "images",
+        iconFileName,
+      );
+      const iconBuffer = await fs.readFile(iconPath);
+
+      // Add white circular background
+      doc
+        .lineWidth(3)
+        .circle(iconX, iconY, iconSize / 2)
+        .stroke(white)
+        .circle(iconX, iconY, iconSize / 2)
+        .stroke(white);
+
+      // Add the transport mode icon
+      const iconImageSize = iconSize * 0.6; // Make icon slightly smaller than circle
+      const iconImageX = iconX - iconImageSize / 2;
+      const iconImageY = iconY - iconImageSize / 2;
+
+      doc.image(iconBuffer, iconImageX, iconImageY, {
+        width: iconImageSize,
+        height: iconImageSize,
+      });
+    } catch (error) {
+      console.warn("Could not load transport mode icon:", error);
+      // Fallback to simple circle with text
+      doc
+        .lineWidth(3)
+        .circle(iconX, iconY, iconSize / 2)
+        .stroke(white);
+
+      // Add fallback icon text
+      doc
+        .fillColor(white)
+        .fontSize(20)
+        .font(poppinsBold)
+        .text("x", iconX - 10, iconY - 10);
+    }
+
+    // Add stop name in header
+    const stopName = stopPlaceInfo.name || id;
+    doc
+      .fillColor(white)
+      .fontSize(36)
+      .font(poppinsBold)
+      .text(stopName, 130, 35, {
+        width: pageWidth - 200,
+        align: "left",
+      });
+
+    // Main content area - centered vertically (adjust for orientation)
+    const footerHeight = 80;
+    const availableHeight = pageHeight - headerHeight - footerHeight;
+    const contentHeight = orientation === "portrait" ? 400 : 310; // More vertical space needed for portrait
+    const contentY = headerHeight + (availableHeight - contentHeight) / 2;
+
+    // Determine the QR code payload
+    let qrUrl: string;
+    if (options?.generateQrUrl) {
+      const qrContext: StopPlaceQrContext = {
+        id,
+        name: stopPlaceInfo.name ?? id,
+      };
+      const candidate = options.generateQrUrl(qrContext);
+      if (!isValidAbsoluteHttpUrl(candidate)) {
+        throw new Error(
+          `generateQrUrl returned an invalid URL for "${id}": ${JSON.stringify(
+            candidate,
+          )}. Expected a non-empty absolute http(s) URL.`,
+        );
+      }
+      qrUrl = candidate;
+    } else {
+      qrUrl = `https://reise.frammr.no/departures/${encodeURIComponent(id)}?qr`;
+    }
+
+    const qrCodeDataURL = await QRCode.toDataURL(qrUrl, {
+      width: 200,
+      margin: 1,
+      color: {
+        dark: "#000000",
+        light: "#FFFFFF",
+      },
+    });
+
+    const base64Data = qrCodeDataURL.split(",")[1];
+    let qrCodeBuffer: Buffer | null = null;
+    if (base64Data) {
+      qrCodeBuffer = Buffer.from(base64Data, "base64");
+    }
+
+    if (orientation === "portrait") {
+      // Portrait layout: QR code in left column, right column text from landscape
+      const qrSize = 120;
+      const topMargin = headerHeight + 20; // Right under header with small margin
+      const qrX = iconX - iconSize / 2; // Same X position as landscape QR code
+      const qrY = topMargin; // Move to top under header
+
+      // Add QR code on the left
+      if (qrCodeBuffer) {
+        doc.image(qrCodeBuffer, qrX, qrY, { width: qrSize, height: qrSize });
+      }
+
+      // Right column text - exactly the same as landscape right column
+      const rightColumnX = pageWidth - 350; // Increased width by 30 points
+      const rightColumnStartY = topMargin; // Same Y position as QR code, under header
+
+      // Norwegian section (from landscape middle column)
+      doc
+        .fillColor(darkGray)
+        .fontSize(24)
+        .font(poppinsBold)
+        .text("Når kjem bussen?", rightColumnX, rightColumnStartY);
+
+      doc
+        .fillColor(darkGray)
+        .fontSize(14)
+        .font(poppinsRegular)
+        .text(
+          "Opne mobilkameraet ditt og hald",
+          rightColumnX,
+          rightColumnStartY + 40,
+        )
+        .text(
+          "kameralinsa over QR-koden. Lenka",
+          rightColumnX,
+          rightColumnStartY + 60,
+        )
+        .text(
+          "fører deg til reiseplanleggaren, og viser",
+          rightColumnX,
+          rightColumnStartY + 80,
+        )
+        .text(
+          "busslinjer og avgangar frå haldeplassen",
+          rightColumnX,
+          rightColumnStartY + 100,
+        )
+        .text("du står på.", rightColumnX, rightColumnStartY + 120);
+
+      // English section (moved to be right after Norwegian section)
+      const englishStartY = rightColumnStartY + 160;
+      doc
+        .fillColor(darkGray)
+        .fontSize(24)
+        .font(poppinsBold)
+        .text("When will the bus", rightColumnX, englishStartY)
+        .text("arrive?", rightColumnX, englishStartY + 25);
+
+      doc
+        .fillColor(darkGray)
+        .fontSize(14)
+        .font(poppinsRegular)
+        .text(
+          "Open your mobile camera and hold",
+          rightColumnX,
+          englishStartY + 60,
+        )
+        .text(
+          "camera lens over the QR code. The link",
+          rightColumnX,
+          englishStartY + 80,
+        )
+        .text(
+          "takes you to the travel planner, and",
+          rightColumnX,
+          englishStartY + 100,
+        )
+        .text(
+          "shows bus lines and departures from the",
+          rightColumnX,
+          englishStartY + 120,
+        )
+        .text("stop you are at.", rightColumnX, englishStartY + 140);
+
+      // Info section (moved to be at the end)
+      const infoStartY = englishStartY + 180;
+      doc
+        .fillColor(darkGray)
+        .fontSize(14)
+        .font(poppinsBold)
+        .text("Informasjon om bussavgangar", rightColumnX, infoStartY)
+        .text("finn du också:", rightColumnX, infoStartY + 20);
+
+      doc
+        .fillColor(darkGray)
+        .fontSize(14)
+        .font(poppinsRegular)
+        .text("Information about bus departures", rightColumnX, infoStartY + 40)
+        .text("can also be found:", rightColumnX, infoStartY + 60);
+
+      doc
+        .fillColor(darkGray)
+        .fontSize(14)
+        .font(poppinsRegular)
+        .text("• I appane / in the apps:", rightColumnX, infoStartY + 100);
+
+      doc
+        .font(poppinsBold)
+        .text("FRAM / Entur", rightColumnX + 10, infoStartY + 120);
+
+      doc
+        .font(poppinsRegular)
+        .text(
+          "• På nettsidene / on the websites:",
+          rightColumnX,
+          infoStartY + 155,
+        );
+
+      doc
+        .font(poppinsBold)
+        .text("frammr.no / entur.no", rightColumnX + 10, infoStartY + 175);
+    } else {
+      const qrSize = 120;
+      const qrX = iconX - iconSize / 2; // Align QR code left edge with left edge of circular icon
+      const qrY = contentY;
+
+      // Add QR code
+      if (qrCodeBuffer) {
+        doc.image(qrCodeBuffer, qrX, qrY, { width: qrSize, height: qrSize });
+      }
+
+      // Text content (center and right)
+      const textStartX = qrX + qrSize + 20; // Text starts after the QR code with some padding
+      const rightColumnX = pageWidth - 320; // Right column remains in the same position
+
+      // Norwegian section
+      doc
+        .fillColor(darkGray)
+        .fontSize(24)
+        .font(poppinsBold)
+        .text("Når kjem bussen?", textStartX, contentY);
+
+      doc
+        .fillColor(darkGray)
+        .fontSize(14)
+        .font(poppinsRegular)
+        .text("Opne mobilkameraet ditt og hald", textStartX, contentY + 40)
+        .text("kameralinsa over QR-koden. Lenka", textStartX, contentY + 60)
+        .text(
+          "fører deg til reiseplanleggaren, og viser",
+          textStartX,
+          contentY + 80,
+        )
+        .text(
+          "busslinjer og avgangar frå haldeplassen",
+          textStartX,
+          contentY + 100,
+        )
+        .text("du står på.", textStartX, contentY + 120);
+
+      // English section
+      doc
+        .fillColor(darkGray)
+        .fontSize(24)
+        .font(poppinsBold)
+        .text("When will the bus", textStartX, contentY + 160)
+        .text("arrive?", textStartX, contentY + 185);
+
+      doc
+        .fillColor(darkGray)
+        .fontSize(14)
+        .font(poppinsRegular)
+        .text("Open your mobile camera and hold", textStartX, contentY + 220)
+        .text(
+          "camera lens over the QR code. The link",
+          textStartX,
+          contentY + 240,
+        )
+        .text(
+          "takes you to the travel planner, and",
+          textStartX,
+          contentY + 260,
+        )
+        .text(
+          "shows bus lines and departures from the",
+          textStartX,
+          contentY + 280,
+        )
+        .text("stop you are at.", textStartX, contentY + 300);
+
+      // Add vertical line separating center and right columns
+      const separatorX = rightColumnX - 22;
+      doc
+        .lineWidth(0.25)
+        .moveTo(separatorX, contentY)
+        .lineTo(separatorX, contentY + 320)
+        .stroke("#000000");
+
+      // Right column - Additional info (aligned with "Opne mobilkameraet ditt ...")
+      const rightColumnStartY = contentY + 40;
+
+      doc
+        .fillColor(darkGray)
+        .fontSize(14)
+        .font(poppinsBold)
+        .text("Informasjon om bussavgangar", rightColumnX, rightColumnStartY)
+        .text("finn du også:", rightColumnX, rightColumnStartY + 20);
+
+      doc
+        .fillColor(darkGray)
+        .fontSize(14)
+        .font(poppinsRegular)
+        .text(
+          "Information about bus departures",
+          rightColumnX,
+          rightColumnStartY + 40,
+        )
+        .text("can also be found:", rightColumnX, rightColumnStartY + 60);
+
+      doc
+        .fillColor(darkGray)
+        .fontSize(14)
+        .font(poppinsRegular)
+        .text(
+          "• I appane / in the apps:",
+          rightColumnX,
+          rightColumnStartY + 100,
+        );
+
+      doc
+        .font(poppinsBold)
+        .text("FRAM / Entur", rightColumnX + 10, rightColumnStartY + 120);
+
+      doc
+        .font(poppinsRegular)
+        .text(
+          "• På nettsidene / on the websites:",
+          rightColumnX,
+          rightColumnStartY + 155,
+        );
+
+      doc
+        .font(poppinsBold)
+        .text(
+          "frammr.no / entur.no",
+          rightColumnX + 10,
+          rightColumnStartY + 175,
+        );
+    }
+
+    // Footer with FRAM logo area - clipped to border box
+    const footerY = pageHeight - footerHeight;
+    doc
+      .save()
+      .roundedRect(
+        borderMargin,
+        borderMargin,
+        boxWidth,
+        boxHeight,
+        borderRadius,
+      )
+      .clip()
+      .rect(borderMargin, footerY, boxWidth, footerHeight)
+      .fill(headerFooterColor)
+      .restore();
+
+    // Add logo in lower right corner
+    try {
+      const logoBuffer = await fs.readFile(logoPath);
+
+      // Position logo in lower right corner of footer with some margin
+      const logoHeight = Math.round(logoWidth * 0.27); // Maintain aspect ratio (approximately 3.75:1)
+      const logoX = pageWidth - borderMargin - logoWidth - 20; // 20px margin from right edge
+      const logoY = footerY + footerHeight - logoHeight - 35; // 35px margin from bottom
+
+      doc.image(logoBuffer, logoX, logoY, {
+        width: logoWidth,
+        height: logoHeight,
+      });
+    } catch (error) {
+      console.warn("Could not load logo image:", error);
+      // Fallback to text logo if image fails to load
+      doc
+        .fillColor(white)
+        .fontSize(24)
+        .font(poppinsBold)
+        .text(fallbackLogoText, pageWidth - 150, footerY + 25);
+
+      if (fallbackLogoSubtext) {
+        doc
+          .fillColor(white)
+          .fontSize(10)
+          .font(poppinsRegular)
+          .text(fallbackLogoSubtext, pageWidth - 220, footerY + 55);
+      }
+    }
+
+    // Finalize the PDF
+    doc.end();
+  } catch (error) {
+    throw new Error(
+      `PDF generation failed: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`,
+    );
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    stream.on("finish", () => {
+      resolve();
+    });
+
+    stream.on("error", (error) => {
+      reject(new Error(`Failed to write PDF: ${error.message}`));
+    });
   });
 }
 
@@ -936,7 +951,7 @@ function generateSafeFilename(id: string, stopPlaceName?: string): string {
   const safeId = id.replace(/[^a-zA-Z0-9\-_]/g, "_");
 
   // If we have a stop place name, add it as a suffix
-  if (stopPlaceName && stopPlaceName.trim()) {
+  if (stopPlaceName?.trim()) {
     const slugifiedName = slugify(stopPlaceName);
     if (slugifiedName) {
       return `${safeId}-${slugifiedName}`;

@@ -1,4 +1,4 @@
-import { join } from "path";
+import { join } from "node:path";
 
 /**
  * Resolves paths to package-owned resources (fonts, images) relative to the

@@ -1,6 +1,6 @@
-import { promises as fs } from "fs";
-import os from "os";
-import path from "path";
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { StopPlaceInfo } from "./enturApi";
 
@@ -47,7 +47,11 @@ function readMediaBox(buf: Buffer): [number, number] {
     str,
   );
   if (!match) throw new Error("MediaBox not found in PDF output");
-  return [parseFloat(match[1]!), parseFloat(match[2]!)];
+  const [, width, height] = match;
+  if (width === undefined || height === undefined) {
+    throw new Error("MediaBox not found in PDF output");
+  }
+  return [parseFloat(width), parseFloat(height)];
 }
 
 afterEach(() => {
@@ -137,8 +141,8 @@ describe("generatePdfsForStopPlaces", () => {
 
       expect(result.generated).toEqual([]);
       expect(result.failed).toHaveLength(1);
-      expect(result.failed[0]!.nsrId).toBe("NSR:StopPlace:10003");
-      expect(result.failed[0]!.error).toMatch(/invalid URL/i);
+      expect(result.failed[0]?.nsrId).toBe("NSR:StopPlace:10003");
+      expect(result.failed[0]?.error).toMatch(/invalid URL/i);
     },
   );
 
@@ -159,7 +163,9 @@ describe("generatePdfsForStopPlaces", () => {
     });
 
     expect(result.generated).toHaveLength(1);
-    const buf = await fs.readFile(result.generated[0]!.outputPath);
+    const [generated] = result.generated;
+    if (!generated) throw new Error("Expected a generated PDF");
+    const buf = await fs.readFile(generated.outputPath);
     const [pdfWidth, pdfHeight] = readMediaBox(buf);
     expect(pdfWidth).toBeCloseTo(width, 1);
     expect(pdfHeight).toBeCloseTo(height, 1);
@@ -176,7 +182,9 @@ describe("generatePdfsForStopPlaces", () => {
       stopPlaceFetcher,
     });
     expect(first.generated).toHaveLength(1);
-    const outputPath = first.generated[0]!.outputPath;
+    const [firstGenerated] = first.generated;
+    if (!firstGenerated) throw new Error("Expected a generated PDF");
+    const outputPath = firstGenerated.outputPath;
     const originalContent = await fs.readFile(outputPath);
 
     // Overwrite the file with sentinel bytes so we can detect skip vs replace.
@@ -460,7 +468,9 @@ describe("generatePdfsForStopPlaces", () => {
       });
 
       expect(result.generated).toHaveLength(1);
-      const stats = await fs.stat(result.generated[0]!.outputPath);
+      const [generated] = result.generated;
+      if (!generated) throw new Error("Expected a generated PDF");
+      const stats = await fs.stat(generated.outputPath);
       expect(stats.size).toBeGreaterThan(0);
 
       const warnMessages = warnSpy.mock.calls.map((call) => String(call[0]));

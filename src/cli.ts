@@ -26,9 +26,14 @@ function logProgress(event: PdfProgressEvent): void {
       console.log(
         `[fetching ${event.current}/${event.total}] ${event.nsrId} - failed: ${event.error}`,
       );
-    } else {
-      console.log(`[fetching ${event.current}/${event.total}] ${event.nsrId}`);
     }
+    return;
+  }
+
+  if (event.type === "data-fetching-batch") {
+    console.log(
+      `Processed batch ${event.batchNumber}/${event.totalBatches}. Waiting ${event.delayMs}ms before next batch...`,
+    );
     return;
   }
 
@@ -170,7 +175,7 @@ program
 
         const result = await NsrBarcodeApi.processFile(processOptions);
 
-        console.log("\n" + result.summary);
+        console.log(`\n${result.summary}`);
 
         // Show warning if not all PDFs were generated successfully
         const uniqueIdsCount = result.parseResult.uniqueIds.size;
@@ -300,7 +305,7 @@ program
 
         const result = await NsrBarcodeApi.generateSinglePdf(generateOptions);
 
-        console.log("\n" + result.summary);
+        console.log(`\n${result.summary}`);
 
         if (!result.success) {
           console.error(`Error: Failed to generate PDF for ID: ${nsrId}`);
@@ -338,7 +343,7 @@ program
       const result = await NsrBarcodeApi.parseIdsFromFile(filePath);
       const summary = require("./utils/idParser").formatIdCountResult(result);
 
-      console.log("\n" + summary);
+      console.log(`\n${summary}`);
       console.log(`\nUnique IDs found:`);
       Array.from(result.uniqueIds).forEach((id, index) => {
         console.log(`${index + 1}. ${id}`);
