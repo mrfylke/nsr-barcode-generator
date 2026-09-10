@@ -1,10 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { NsrBarcodeApi } from "./api";
 
 describe("NsrBarcodeApi.validateNsrId", () => {
   it("accepts a well-formed NSR:StopPlace ID", () => {
     expect(NsrBarcodeApi.validateNsrId("NSR:StopPlace:10003").isValid).toBe(
-      true
+      true,
     );
   });
 

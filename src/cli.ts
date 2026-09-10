@@ -6,13 +6,13 @@
  */
 
 import { Command } from "commander";
-import {
-  NsrBarcodeApi,
-  IdParseError,
-  PdfStyleConfig,
-  PdfProgressEvent,
-} from "./api";
 import { version } from "../package.json";
+import {
+  type IdParseError,
+  NsrBarcodeApi,
+  type PdfProgressEvent,
+  type PdfStyleConfig,
+} from "./api";
 
 const program = new Command();
 
@@ -24,7 +24,7 @@ function logProgress(event: PdfProgressEvent): void {
   if (event.type === "data-fetching") {
     if (event.status === "error") {
       console.log(
-        `[fetching ${event.current}/${event.total}] ${event.nsrId} - failed: ${event.error}`
+        `[fetching ${event.current}/${event.total}] ${event.nsrId} - failed: ${event.error}`,
       );
     } else {
       console.log(`[fetching ${event.current}/${event.total}] ${event.nsrId}`);
@@ -35,17 +35,17 @@ function logProgress(event: PdfProgressEvent): void {
   switch (event.status) {
     case "generated":
       console.log(
-        `[generating ${event.current}/${event.total}] ${event.nsrId} -> ${event.outputPath}`
+        `[generating ${event.current}/${event.total}] ${event.nsrId} -> ${event.outputPath}`,
       );
       break;
     case "skipped":
       console.log(
-        `[generating ${event.current}/${event.total}] ${event.nsrId} - skipped (already exists)`
+        `[generating ${event.current}/${event.total}] ${event.nsrId} - skipped (already exists)`,
       );
       break;
     case "error":
       console.log(
-        `[generating ${event.current}/${event.total}] ${event.nsrId} - failed: ${event.error}`
+        `[generating ${event.current}/${event.total}] ${event.nsrId} - failed: ${event.error}`,
       );
       break;
   }
@@ -61,28 +61,28 @@ program
   .argument("<file>", "path to the file containing IDs (one per line)")
   .requiredOption(
     "-o, --output <directory>",
-    "output directory for generated PDFs"
+    "output directory for generated PDFs",
   )
   .option("-f, --format <format>", "PDF format (A4, A3, Letter)", "A4")
   .option(
     "--orientation <orientation>",
     "PDF orientation (landscape, portrait)",
-    "landscape"
+    "landscape",
   )
   .option(
     "--header-color <color>",
-    "Header and footer background color (hex format, e.g., #1A4D75)"
+    "Header and footer background color (hex format, e.g., #1A4D75)",
   )
   .option(
     "--logo-path <path>",
-    "Path to logo image file for lower right corner"
+    "Path to logo image file for lower right corner",
   )
   .option("--logo-width <width>", "Logo width in pixels", parseInt)
   .option("--fallback-text <text>", "Fallback text if logo cannot be loaded")
   .option("--fallback-subtext <text>", "Additional fallback text (subtitle)")
   .option(
     "--overwrite",
-    "Replace existing output PDFs instead of skipping them"
+    "Replace existing output PDFs instead of skipping them",
   )
   .description("Generate PDF files for unique IDs from an input file")
   .action(
@@ -98,14 +98,14 @@ program
         fallbackText?: string;
         fallbackSubtext?: string;
         overwrite?: boolean;
-      }
+      },
     ) => {
       try {
         // Validate format option
         const format = options.format as "A4" | "A3" | "Letter" | undefined;
         if (format && !["A4", "A3", "Letter"].includes(format)) {
           console.error(
-            `Error: Invalid format "${format}". Supported formats: A4, A3, Letter`
+            `Error: Invalid format "${format}". Supported formats: A4, A3, Letter`,
           );
           process.exit(1);
         }
@@ -117,7 +117,7 @@ program
           | undefined;
         if (orientation && !["landscape", "portrait"].includes(orientation)) {
           console.error(
-            `Error: Invalid orientation "${orientation}". Supported orientations: landscape, portrait`
+            `Error: Invalid orientation "${orientation}". Supported orientations: landscape, portrait`,
           );
           process.exit(1);
         }
@@ -176,13 +176,13 @@ program
         const uniqueIdsCount = result.parseResult.uniqueIds.size;
         if (result.pdfResult.totalGenerated !== uniqueIdsCount) {
           console.warn(
-            `\nWarning: Only ${result.pdfResult.totalGenerated} of ${uniqueIdsCount} PDFs were generated successfully`
+            `\nWarning: Only ${result.pdfResult.totalGenerated} of ${uniqueIdsCount} PDFs were generated successfully`,
           );
         }
       } catch (error) {
         handleError(error);
       }
-    }
+    },
   );
 
 program
@@ -190,28 +190,28 @@ program
   .argument("<nsrId>", "single NSR ID (e.g., NSR:StopPlace:39598)")
   .requiredOption(
     "-o, --output <directory>",
-    "output directory for generated PDF"
+    "output directory for generated PDF",
   )
   .option("-f, --format <format>", "PDF format (A4, A3, Letter)", "A4")
   .option(
     "--orientation <orientation>",
     "PDF orientation (landscape, portrait)",
-    "landscape"
+    "landscape",
   )
   .option(
     "--header-color <color>",
-    "Header and footer background color (hex format, e.g., #1A4D75)"
+    "Header and footer background color (hex format, e.g., #1A4D75)",
   )
   .option(
     "--logo-path <path>",
-    "Path to logo image file for lower right corner"
+    "Path to logo image file for lower right corner",
   )
   .option("--logo-width <width>", "Logo width in pixels", parseInt)
   .option("--fallback-text <text>", "Fallback text if logo cannot be loaded")
   .option("--fallback-subtext <text>", "Additional fallback text (subtitle)")
   .option(
     "--overwrite",
-    "Replace an existing output PDF instead of skipping it"
+    "Replace an existing output PDF instead of skipping it",
   )
   .description("Generate PDF for a single NSR ID")
   .action(
@@ -227,14 +227,14 @@ program
         fallbackText?: string;
         fallbackSubtext?: string;
         overwrite?: boolean;
-      }
+      },
     ) => {
       try {
         // Validate format option
         const format = options.format as "A4" | "A3" | "Letter" | undefined;
         if (format && !["A4", "A3", "Letter"].includes(format)) {
           console.error(
-            `Error: Invalid format "${format}". Supported formats: A4, A3, Letter`
+            `Error: Invalid format "${format}". Supported formats: A4, A3, Letter`,
           );
           process.exit(1);
         }
@@ -246,7 +246,7 @@ program
           | undefined;
         if (orientation && !["landscape", "portrait"].includes(orientation)) {
           console.error(
-            `Error: Invalid orientation "${orientation}". Supported orientations: landscape, portrait`
+            `Error: Invalid orientation "${orientation}". Supported orientations: landscape, portrait`,
           );
           process.exit(1);
         }
@@ -309,7 +309,7 @@ program
       } catch (error) {
         handleError(error);
       }
-    }
+    },
   );
 
 program

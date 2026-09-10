@@ -1,7 +1,7 @@
-import { describe, it, expect, afterEach } from "vitest";
 import { promises as fs } from "fs";
 import os from "os";
 import path from "path";
+import { afterEach, describe, expect, it } from "vitest";
 import { getAssetPath, resolveAssetPath } from "./assets";
 
 describe("getAssetPath", () => {
@@ -13,16 +13,16 @@ describe("getAssetPath", () => {
 
   it("resolves bundled font and image assets that exist on disk", async () => {
     await expect(
-      fs.access(getAssetPath("fonts", "poppins-400-normal.ttf"))
+      fs.access(getAssetPath("fonts", "poppins-400-normal.ttf")),
     ).resolves.toBeUndefined();
     await expect(
-      fs.access(getAssetPath("fonts", "poppins-700-normal.ttf"))
+      fs.access(getAssetPath("fonts", "poppins-700-normal.ttf")),
     ).resolves.toBeUndefined();
     await expect(
-      fs.access(getAssetPath("images", "fram_mor_fylkeskommune_dark.png"))
+      fs.access(getAssetPath("images", "fram_mor_fylkeskommune_dark.png")),
     ).resolves.toBeUndefined();
     await expect(
-      fs.access(getAssetPath("images", "Bus.png"))
+      fs.access(getAssetPath("images", "Bus.png")),
     ).resolves.toBeUndefined();
   });
 
@@ -30,13 +30,13 @@ describe("getAssetPath", () => {
     const expected = getAssetPath("fonts", "poppins-400-normal.ttf");
 
     const unrelatedDir = await fs.mkdtemp(
-      path.join(os.tmpdir(), "nsr-barcode-cwd-")
+      path.join(os.tmpdir(), "nsr-barcode-cwd-"),
     );
     process.chdir(unrelatedDir);
 
     const resolvedFromElsewhere = getAssetPath(
       "fonts",
-      "poppins-400-normal.ttf"
+      "poppins-400-normal.ttf",
     );
 
     expect(resolvedFromElsewhere).toBe(expected);
@@ -48,8 +48,8 @@ describe("getAssetPath", () => {
       resolveAssetPath(
         "/opt/my-app/resources/poster-assets",
         "images",
-        "Bus.png"
-      )
+        "Bus.png",
+      ),
     ).toBe("/opt/my-app/resources/poster-assets/images/Bus.png");
   });
 });

@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
 import { promises as fs } from "fs";
 import os from "os";
 import path from "path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { StopPlaceInfo } from "./enturApi";
 
 const capturedQrUrls: string[] = [];
@@ -13,7 +13,14 @@ vi.mock("qrcode", () => {
       // Return a real bundled PNG (as a data URL) so PDFKit can embed a
       // valid image regardless of what URL was requested - we only care
       // about the URL string passed in, not real QR encoding here.
-      const pngPath = path.join(__dirname, "..", "..", "assets", "images", "Bus.png");
+      const pngPath = path.join(
+        __dirname,
+        "..",
+        "..",
+        "assets",
+        "images",
+        "Bus.png",
+      );
       const buf = await fs.readFile(pngPath);
       return `data:image/png;base64,${buf.toString("base64")}`;
     }),
@@ -23,7 +30,10 @@ vi.mock("qrcode", () => {
 const { generatePdfsForStopPlaces } = await import("./pdfGenerator");
 const { NsrBarcodeApi } = await import("../api");
 
-function stopPlace(id: string, overrides: Partial<StopPlaceInfo> = {}): StopPlaceInfo {
+function stopPlace(
+  id: string,
+  overrides: Partial<StopPlaceInfo> = {},
+): StopPlaceInfo {
   return { id, name: `Stop ${id}`, ...overrides };
 }
 
@@ -33,7 +43,9 @@ async function makeTempDir(): Promise<string> {
 
 function readMediaBox(buf: Buffer): [number, number] {
   const str = buf.toString("latin1");
-  const match = /\/MediaBox\s*\[\s*0\s+0\s+([0-9.]+)\s+([0-9.]+)\s*\]/.exec(str);
+  const match = /\/MediaBox\s*\[\s*0\s+0\s+([0-9.]+)\s+([0-9.]+)\s*\]/.exec(
+    str,
+  );
   if (!match) throw new Error("MediaBox not found in PDF output");
   return [parseFloat(match[1]!), parseFloat(match[2]!)];
 }
@@ -48,13 +60,15 @@ describe("generatePdfsForStopPlaces", () => {
     const outputDirectory = await makeTempDir();
     const generateQrUrl = vi.fn(
       ({ id }: { id: string; name: string }) =>
-        `https://qr.frammr.no/holdeplass/${id.replace(/^NSR:StopPlace:/, "")}`
+        `https://qr.frammr.no/holdeplass/${id.replace(/^NSR:StopPlace:/, "")}`,
     );
 
     const result = await generatePdfsForStopPlaces(["NSR:StopPlace:10003"], {
       outputDirectory,
       generateQrUrl,
-      stopPlaceFetcher: async () => [stopPlace("NSR:StopPlace:10003", { name: "Malmefjorden" })],
+      stopPlaceFetcher: async () => [
+        stopPlace("NSR:StopPlace:10003", { name: "Malmefjorden" }),
+      ],
     });
 
     expect(generateQrUrl).toHaveBeenCalledTimes(1);
@@ -76,16 +90,17 @@ describe("generatePdfsForStopPlaces", () => {
       ["NSR:StopPlace:10003", "NSR:StopPlace:10004"],
       {
         outputDirectory,
-        generateQrUrl: ({ id }) => `https://qr.frammr.no/holdeplass/${stripPrefix(id)}`,
+        generateQrUrl: ({ id }) =>
+          `https://qr.frammr.no/holdeplass/${stripPrefix(id)}`,
         stopPlaceFetcher: async (ids) => ids.map((id) => stopPlace(id)),
-      }
+      },
     );
 
     expect(capturedQrUrls.sort()).toEqual(
       [
         "https://qr.frammr.no/holdeplass/10003",
         "https://qr.frammr.no/holdeplass/10004",
-      ].sort()
+      ].sort(),
     );
     expect(result.generated).toHaveLength(2);
     expect(result.failed).toEqual([]);
@@ -109,20 +124,23 @@ describe("generatePdfsForStopPlaces", () => {
     ["relative URL", () => "/holdeplass/10003"],
     ["non-http(s) protocol", () => "ftp://qr.frammr.no/holdeplass/10003"],
     ["non-string return value", () => 12345 as unknown as string],
-  ])("reports a per-item error when generateQrUrl returns %s", async (_label, generateQrUrl) => {
-    const outputDirectory = await makeTempDir();
+  ])(
+    "reports a per-item error when generateQrUrl returns %s",
+    async (_label, generateQrUrl) => {
+      const outputDirectory = await makeTempDir();
 
-    const result = await generatePdfsForStopPlaces(["NSR:StopPlace:10003"], {
-      outputDirectory,
-      generateQrUrl,
-      stopPlaceFetcher: async () => [stopPlace("NSR:StopPlace:10003")],
-    });
+      const result = await generatePdfsForStopPlaces(["NSR:StopPlace:10003"], {
+        outputDirectory,
+        generateQrUrl,
+        stopPlaceFetcher: async () => [stopPlace("NSR:StopPlace:10003")],
+      });
 
-    expect(result.generated).toEqual([]);
-    expect(result.failed).toHaveLength(1);
-    expect(result.failed[0]!.nsrId).toBe("NSR:StopPlace:10003");
-    expect(result.failed[0]!.error).toMatch(/invalid URL/i);
-  });
+      expect(result.generated).toEqual([]);
+      expect(result.failed).toHaveLength(1);
+      expect(result.failed[0]!.nsrId).toBe("NSR:StopPlace:10003");
+      expect(result.failed[0]!.error).toMatch(/invalid URL/i);
+    },
+  );
 
   it.each([
     ["A4", 595.28, 841.89],
@@ -135,7 +153,9 @@ describe("generatePdfsForStopPlaces", () => {
       outputDirectory,
       format,
       orientation: "portrait",
-      stopPlaceFetcher: async () => [stopPlace("NSR:StopPlace:10003", { name: "Format Test" })],
+      stopPlaceFetcher: async () => [
+        stopPlace("NSR:StopPlace:10003", { name: "Format Test" }),
+      ],
     });
 
     expect(result.generated).toHaveLength(1);
@@ -147,7 +167,9 @@ describe("generatePdfsForStopPlaces", () => {
 
   it("skips an existing output file when overwrite is false, and replaces it when overwrite is true", async () => {
     const outputDirectory = await makeTempDir();
-    const stopPlaceFetcher = async () => [stopPlace("NSR:StopPlace:10003", { name: "Overwrite Test" })];
+    const stopPlaceFetcher = async () => [
+      stopPlace("NSR:StopPlace:10003", { name: "Overwrite Test" }),
+    ];
 
     const first = await generatePdfsForStopPlaces(["NSR:StopPlace:10003"], {
       outputDirectory,
@@ -160,21 +182,31 @@ describe("generatePdfsForStopPlaces", () => {
     // Overwrite the file with sentinel bytes so we can detect skip vs replace.
     await fs.writeFile(outputPath, Buffer.from("SENTINEL"));
 
-    const skipResult = await generatePdfsForStopPlaces(["NSR:StopPlace:10003"], {
-      outputDirectory,
-      overwrite: false,
-      stopPlaceFetcher,
-    });
-    expect(skipResult.skipped).toEqual([{ nsrId: "NSR:StopPlace:10003", outputPath }]);
+    const skipResult = await generatePdfsForStopPlaces(
+      ["NSR:StopPlace:10003"],
+      {
+        outputDirectory,
+        overwrite: false,
+        stopPlaceFetcher,
+      },
+    );
+    expect(skipResult.skipped).toEqual([
+      { nsrId: "NSR:StopPlace:10003", outputPath },
+    ]);
     expect(skipResult.generated).toEqual([]);
     expect((await fs.readFile(outputPath)).toString()).toBe("SENTINEL");
 
-    const overwriteResult = await generatePdfsForStopPlaces(["NSR:StopPlace:10003"], {
-      outputDirectory,
-      overwrite: true,
-      stopPlaceFetcher,
-    });
-    expect(overwriteResult.generated).toEqual([{ nsrId: "NSR:StopPlace:10003", outputPath }]);
+    const overwriteResult = await generatePdfsForStopPlaces(
+      ["NSR:StopPlace:10003"],
+      {
+        outputDirectory,
+        overwrite: true,
+        stopPlaceFetcher,
+      },
+    );
+    expect(overwriteResult.generated).toEqual([
+      { nsrId: "NSR:StopPlace:10003", outputPath },
+    ]);
     expect(overwriteResult.skipped).toEqual([]);
     const replacedContent = await fs.readFile(outputPath);
     expect(replacedContent.equals(Buffer.from("SENTINEL"))).toBe(false);
@@ -184,10 +216,16 @@ describe("generatePdfsForStopPlaces", () => {
 
   it("emits one progress event per requested ID and returns correct generated/skipped/failed counts, without aborting the batch on a single failure", async () => {
     const outputDirectory = await makeTempDir();
-    const ids = ["NSR:StopPlace:10001", "NSR:StopPlace:10002", "NSR:StopPlace:10003"];
+    const ids = [
+      "NSR:StopPlace:10001",
+      "NSR:StopPlace:10002",
+      "NSR:StopPlace:10003",
+    ];
 
     const stopPlaceFetcher = async (requestedIds: string[]) =>
-      requestedIds.map((id) => (id === "NSR:StopPlace:10002" ? null : stopPlace(id)));
+      requestedIds.map((id) =>
+        id === "NSR:StopPlace:10002" ? null : stopPlace(id),
+      );
 
     const events: Array<{ nsrId: string; status: string }> = [];
     const result = await generatePdfsForStopPlaces(ids, {
@@ -200,12 +238,17 @@ describe("generatePdfsForStopPlaces", () => {
     });
 
     expect(events).toHaveLength(3);
-    expect(events.find((e) => e.nsrId === "NSR:StopPlace:10002")?.status).toBe("error");
+    expect(events.find((e) => e.nsrId === "NSR:StopPlace:10002")?.status).toBe(
+      "error",
+    );
     expect(events.filter((e) => e.status === "generated")).toHaveLength(2);
 
     expect(result.generated).toHaveLength(2);
     expect(result.failed).toEqual([
-      { nsrId: "NSR:StopPlace:10002", error: expect.stringContaining("NSR:StopPlace:10002") },
+      {
+        nsrId: "NSR:StopPlace:10002",
+        error: expect.stringContaining("NSR:StopPlace:10002"),
+      },
     ]);
     expect(result.skipped).toEqual([]);
     expect(result.totalGenerated).toBe(2);
@@ -213,18 +256,25 @@ describe("generatePdfsForStopPlaces", () => {
 
   it("does not call the metadata fetcher when every request is a fully-specified StopPlaceInput", async () => {
     const outputDirectory = await makeTempDir();
-    const stopPlaceFetcher = vi.fn(async (ids: string[]) => ids.map(() => null));
+    const stopPlaceFetcher = vi.fn(async (ids: string[]) =>
+      ids.map(() => null),
+    );
 
     const result = await generatePdfsForStopPlaces(
       [
         { id: "NSR:StopPlace:10003", name: "Supplied Name A" },
-        { id: "NSR:StopPlace:10004", name: "Supplied Name B", transportMode: ["bus"] },
+        {
+          id: "NSR:StopPlace:10004",
+          name: "Supplied Name B",
+          transportMode: ["bus"],
+        },
       ],
       {
         outputDirectory,
         stopPlaceFetcher,
-        generateQrUrl: ({ name }) => `https://qr.frammr.no/holdeplass/${encodeURIComponent(name)}`,
-      }
+        generateQrUrl: ({ name }) =>
+          `https://qr.frammr.no/holdeplass/${encodeURIComponent(name)}`,
+      },
     );
 
     expect(stopPlaceFetcher).not.toHaveBeenCalled();
@@ -234,20 +284,25 @@ describe("generatePdfsForStopPlaces", () => {
       [
         "https://qr.frammr.no/holdeplass/Supplied%20Name%20A",
         "https://qr.frammr.no/holdeplass/Supplied%20Name%20B",
-      ].sort()
+      ].sort(),
     );
   });
 
   it("only fetches metadata for requests that are bare IDs, in a mixed array of IDs and StopPlaceInputs", async () => {
     const outputDirectory = await makeTempDir();
-    const stopPlaceFetcher = vi.fn(async (ids: string[]) => ids.map((id) => stopPlace(id, { name: "Fetched Name" })));
+    const stopPlaceFetcher = vi.fn(async (ids: string[]) =>
+      ids.map((id) => stopPlace(id, { name: "Fetched Name" })),
+    );
 
     const result = await generatePdfsForStopPlaces(
-      [{ id: "NSR:StopPlace:10003", name: "Supplied Name" }, "NSR:StopPlace:10004"],
+      [
+        { id: "NSR:StopPlace:10003", name: "Supplied Name" },
+        "NSR:StopPlace:10004",
+      ],
       {
         outputDirectory,
         stopPlaceFetcher,
-      }
+      },
     );
 
     expect(stopPlaceFetcher).toHaveBeenCalledTimes(1);
@@ -260,12 +315,12 @@ describe("generatePdfsForStopPlaces", () => {
     it("does not fetch a StopPlaceInput missing transportMode by default", async () => {
       const outputDirectory = await makeTempDir();
       const stopPlaceFetcher = vi.fn(async (ids: string[]) =>
-        ids.map((id) => stopPlace(id, { transportMode: ["ferry"] }))
+        ids.map((id) => stopPlace(id, { transportMode: ["ferry"] })),
       );
 
       const result = await generatePdfsForStopPlaces(
         [{ id: "NSR:StopPlace:10003", name: "Supplied Name" }],
-        { outputDirectory, stopPlaceFetcher }
+        { outputDirectory, stopPlaceFetcher },
       );
 
       expect(stopPlaceFetcher).not.toHaveBeenCalled();
@@ -276,7 +331,12 @@ describe("generatePdfsForStopPlaces", () => {
     it("fetches transport mode for a StopPlaceInput missing it when enrichTransportMode is true, without overwriting the supplied name", async () => {
       const outputDirectory = await makeTempDir();
       const stopPlaceFetcher = vi.fn(async (ids: string[]) =>
-        ids.map((id) => stopPlace(id, { name: "Entur Name (should be ignored)", transportMode: ["ferry"] }))
+        ids.map((id) =>
+          stopPlace(id, {
+            name: "Entur Name (should be ignored)",
+            transportMode: ["ferry"],
+          }),
+        ),
       );
 
       const result = await generatePdfsForStopPlaces(
@@ -285,8 +345,9 @@ describe("generatePdfsForStopPlaces", () => {
           outputDirectory,
           stopPlaceFetcher,
           enrichTransportMode: true,
-          generateQrUrl: ({ name }) => `https://qr.frammr.no/holdeplass/${encodeURIComponent(name)}`,
-        }
+          generateQrUrl: ({ name }) =>
+            `https://qr.frammr.no/holdeplass/${encodeURIComponent(name)}`,
+        },
       );
 
       expect(stopPlaceFetcher).toHaveBeenCalledTimes(1);
@@ -294,16 +355,26 @@ describe("generatePdfsForStopPlaces", () => {
       expect(result.failed).toEqual([]);
       expect(result.generated).toHaveLength(1);
       // The supplied name wins even though the fetch returned a different one.
-      expect(capturedQrUrls).toEqual(["https://qr.frammr.no/holdeplass/Supplied%20Name"]);
+      expect(capturedQrUrls).toEqual([
+        "https://qr.frammr.no/holdeplass/Supplied%20Name",
+      ]);
     });
 
     it("does not re-fetch a StopPlaceInput that already has transportMode, even when enrichTransportMode is true", async () => {
       const outputDirectory = await makeTempDir();
-      const stopPlaceFetcher = vi.fn(async (ids: string[]) => ids.map(() => null));
+      const stopPlaceFetcher = vi.fn(async (ids: string[]) =>
+        ids.map(() => null),
+      );
 
       const result = await generatePdfsForStopPlaces(
-        [{ id: "NSR:StopPlace:10003", name: "Supplied Name", transportMode: ["bus"] }],
-        { outputDirectory, stopPlaceFetcher, enrichTransportMode: true }
+        [
+          {
+            id: "NSR:StopPlace:10003",
+            name: "Supplied Name",
+            transportMode: ["bus"],
+          },
+        ],
+        { outputDirectory, stopPlaceFetcher, enrichTransportMode: true },
       );
 
       expect(stopPlaceFetcher).not.toHaveBeenCalled();
@@ -313,11 +384,13 @@ describe("generatePdfsForStopPlaces", () => {
 
     it("still succeeds using the supplied name when the enrichment fetch fails", async () => {
       const outputDirectory = await makeTempDir();
-      const stopPlaceFetcher = vi.fn(async (ids: string[]) => ids.map(() => null));
+      const stopPlaceFetcher = vi.fn(async (ids: string[]) =>
+        ids.map(() => null),
+      );
 
       const result = await generatePdfsForStopPlaces(
         [{ id: "NSR:StopPlace:10003", name: "Supplied Name" }],
-        { outputDirectory, stopPlaceFetcher, enrichTransportMode: true }
+        { outputDirectory, stopPlaceFetcher, enrichTransportMode: true },
       );
 
       expect(stopPlaceFetcher).toHaveBeenCalledWith(["NSR:StopPlace:10003"]);
@@ -328,7 +401,9 @@ describe("generatePdfsForStopPlaces", () => {
 
   it("uses the last entry when the request array contains duplicate IDs", async () => {
     const outputDirectory = await makeTempDir();
-    const stopPlaceFetcher = vi.fn(async (ids: string[]) => ids.map(() => null));
+    const stopPlaceFetcher = vi.fn(async (ids: string[]) =>
+      ids.map(() => null),
+    );
 
     const result = await generatePdfsForStopPlaces(
       [
@@ -338,18 +413,23 @@ describe("generatePdfsForStopPlaces", () => {
       {
         outputDirectory,
         stopPlaceFetcher,
-        generateQrUrl: ({ name }) => `https://qr.frammr.no/holdeplass/${encodeURIComponent(name)}`,
-      }
+        generateQrUrl: ({ name }) =>
+          `https://qr.frammr.no/holdeplass/${encodeURIComponent(name)}`,
+      },
     );
 
     expect(stopPlaceFetcher).not.toHaveBeenCalled();
     expect(result.failed).toEqual([]);
-    expect(capturedQrUrls).toEqual(["https://qr.frammr.no/holdeplass/Last%20Name"]);
+    expect(capturedQrUrls).toEqual([
+      "https://qr.frammr.no/holdeplass/Last%20Name",
+    ]);
   });
 
   it("NsrBarcodeApi.generateSinglePdf skips Entur when `name` is supplied directly", async () => {
     const outputDirectory = await makeTempDir();
-    const stopPlaceFetcher = vi.fn(async (ids: string[]) => ids.map(() => null));
+    const stopPlaceFetcher = vi.fn(async (ids: string[]) =>
+      ids.map(() => null),
+    );
 
     const result = await NsrBarcodeApi.generateSinglePdf({
       nsrId: "NSR:StopPlace:10003",
@@ -374,7 +454,9 @@ describe("generatePdfsForStopPlaces", () => {
     try {
       const result = await generatePdfsForStopPlaces(["NSR:StopPlace:10003"], {
         outputDirectory,
-        stopPlaceFetcher: async () => [stopPlace("NSR:StopPlace:10003", { name: "Cwd Test" })],
+        stopPlaceFetcher: async () => [
+          stopPlace("NSR:StopPlace:10003", { name: "Cwd Test" }),
+        ],
       });
 
       expect(result.generated).toHaveLength(1);
@@ -382,9 +464,19 @@ describe("generatePdfsForStopPlaces", () => {
       expect(stats.size).toBeGreaterThan(0);
 
       const warnMessages = warnSpy.mock.calls.map((call) => String(call[0]));
-      expect(warnMessages.some((m) => m.includes("Could not load transport mode icon"))).toBe(false);
-      expect(warnMessages.some((m) => m.includes("Could not load logo image"))).toBe(false);
-      expect(warnMessages.some((m) => m.includes("Failed to read bundled Poppins fonts"))).toBe(false);
+      expect(
+        warnMessages.some((m) =>
+          m.includes("Could not load transport mode icon"),
+        ),
+      ).toBe(false);
+      expect(
+        warnMessages.some((m) => m.includes("Could not load logo image")),
+      ).toBe(false);
+      expect(
+        warnMessages.some((m) =>
+          m.includes("Failed to read bundled Poppins fonts"),
+        ),
+      ).toBe(false);
     } finally {
       process.chdir(originalCwd);
     }

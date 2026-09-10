@@ -1,11 +1,14 @@
+import { createWriteStream, promises as fs } from "fs";
+import { join, resolve } from "path";
 import PDFDocument from "pdfkit";
-import { promises as fs } from "fs";
-import { resolve, join } from "path";
-import { createWriteStream } from "fs";
 import * as QRCode from "qrcode";
-import { enturApi, StopPlaceInfo, StopPlaceFetchProgressEvent } from "./enturApi";
-import { fontLoader } from "./fontLoader";
 import { resolveAssetPath } from "./assets";
+import {
+  enturApi,
+  type StopPlaceFetchProgressEvent,
+  type StopPlaceInfo,
+} from "./enturApi";
+import { fontLoader } from "./fontLoader";
 
 export interface PdfStyleConfig {
   /** Color for header and footer background (hex color) */
@@ -183,7 +186,7 @@ export interface PdfGenerationResult {
  */
 export async function generatePdfsForStopPlaces(
   requests: StopPlaceRequest[],
-  options: PdfGenerationOptions
+  options: PdfGenerationOptions,
 ): Promise<PdfGenerationResult> {
   const { outputDirectory, overwrite = false, onProgress } = options;
 
@@ -195,7 +198,7 @@ export async function generatePdfsForStopPlaces(
   const failed: PdfGenerationFailure[] = [];
 
   const ids: string[] = requests.map((request) =>
-    typeof request === "string" ? request : request.id
+    typeof request === "string" ? request : request.id,
   );
 
   const overridesById = new Map<string, StopPlaceInput>();
@@ -235,7 +238,7 @@ export async function generatePdfsForStopPlaces(
     fetchedInfos = await fetchStopPlaces(idsNeedingFetch);
   }
   const fetchedById = new Map<string, StopPlaceInfo | null>(
-    idsNeedingFetch.map((id, index) => [id, fetchedInfos[index] ?? null])
+    idsNeedingFetch.map((id, index) => [id, fetchedInfos[index] ?? null]),
   );
 
   const stopPlaceInfos: (StopPlaceInfo | null)[] = ids.map((id) => {
@@ -243,7 +246,8 @@ export async function generatePdfsForStopPlaces(
     if (override) {
       // The supplied name is authoritative and never overwritten by a fetch.
       const info: StopPlaceInfo = { id, name: override.name };
-      const transportMode = override.transportMode ?? fetchedById.get(id)?.transportMode;
+      const transportMode =
+        override.transportMode ?? fetchedById.get(id)?.transportMode;
       if (transportMode) {
         info.transportMode = transportMode;
       }
@@ -346,7 +350,7 @@ async function generateSinglePdf(
   id: string,
   outputPath: string,
   stopPlaceInfo: StopPlaceInfo,
-  options?: PdfGenerationOptions
+  options?: PdfGenerationOptions,
 ): Promise<void> {
   return new Promise(async (resolvePromise, reject) => {
     try {
@@ -385,7 +389,7 @@ async function generateSinglePdf(
       } catch (fontError) {
         console.warn(
           "Failed to register Poppins fonts, using fallback:",
-          fontError
+          fontError,
         );
       }
 
@@ -405,7 +409,7 @@ async function generateSinglePdf(
         resolveAssetPath(
           options?.assetsDirectory,
           "images",
-          "fram_mor_fylkeskommune_dark.png"
+          "fram_mor_fylkeskommune_dark.png",
         );
       const logoWidth = styleConfig.logoWidth || 105;
       const fallbackLogoText = styleConfig.fallbackLogoText || "FRAM";
@@ -429,7 +433,7 @@ async function generateSinglePdf(
           borderMargin,
           boxWidth,
           boxHeight,
-          borderRadius
+          borderRadius,
         )
         .stroke("#000000");
 
@@ -442,7 +446,7 @@ async function generateSinglePdf(
           borderMargin,
           boxWidth,
           boxHeight,
-          borderRadius
+          borderRadius,
         )
         .clip()
         .rect(borderMargin, borderMargin, boxWidth, headerHeight)
@@ -476,7 +480,7 @@ async function generateSinglePdf(
         const iconPath = resolveAssetPath(
           options?.assetsDirectory,
           "images",
-          iconFileName
+          iconFileName,
         );
         const iconBuffer = await fs.readFile(iconPath);
 
@@ -541,14 +545,14 @@ async function generateSinglePdf(
         if (!isValidAbsoluteHttpUrl(candidate)) {
           throw new Error(
             `generateQrUrl returned an invalid URL for "${id}": ${JSON.stringify(
-              candidate
-            )}. Expected a non-empty absolute http(s) URL.`
+              candidate,
+            )}. Expected a non-empty absolute http(s) URL.`,
           );
         }
         qrUrl = candidate;
       } else {
         qrUrl = `https://reise.frammr.no/departures/${encodeURIComponent(
-          id
+          id,
         )}?qr`;
       }
 
@@ -597,22 +601,22 @@ async function generateSinglePdf(
           .text(
             "Opne mobilkameraet ditt og hald",
             rightColumnX,
-            rightColumnStartY + 40
+            rightColumnStartY + 40,
           )
           .text(
             "kameralinsa over QR-koden. Lenka",
             rightColumnX,
-            rightColumnStartY + 60
+            rightColumnStartY + 60,
           )
           .text(
             "fører deg til reiseplanleggaren, og viser",
             rightColumnX,
-            rightColumnStartY + 80
+            rightColumnStartY + 80,
           )
           .text(
             "busslinjer og avgangar frå haldeplassen",
             rightColumnX,
-            rightColumnStartY + 100
+            rightColumnStartY + 100,
           )
           .text("du står på.", rightColumnX, rightColumnStartY + 120);
 
@@ -632,22 +636,22 @@ async function generateSinglePdf(
           .text(
             "Open your mobile camera and hold",
             rightColumnX,
-            englishStartY + 60
+            englishStartY + 60,
           )
           .text(
             "camera lens over the QR code. The link",
             rightColumnX,
-            englishStartY + 80
+            englishStartY + 80,
           )
           .text(
             "takes you to the travel planner, and",
             rightColumnX,
-            englishStartY + 100
+            englishStartY + 100,
           )
           .text(
             "shows bus lines and departures from the",
             rightColumnX,
-            englishStartY + 120
+            englishStartY + 120,
           )
           .text("stop you are at.", rightColumnX, englishStartY + 140);
 
@@ -667,7 +671,7 @@ async function generateSinglePdf(
           .text(
             "Information about bus departures",
             rightColumnX,
-            infoStartY + 40
+            infoStartY + 40,
           )
           .text("can also be found:", rightColumnX, infoStartY + 60);
 
@@ -686,7 +690,7 @@ async function generateSinglePdf(
           .text(
             "• På nettsidene / on the websites:",
             rightColumnX,
-            infoStartY + 155
+            infoStartY + 155,
           );
 
         doc
@@ -722,12 +726,12 @@ async function generateSinglePdf(
           .text(
             "fører deg til reiseplanleggaren, og viser",
             textStartX,
-            contentY + 80
+            contentY + 80,
           )
           .text(
             "busslinjer og avgangar frå haldeplassen",
             textStartX,
-            contentY + 100
+            contentY + 100,
           )
           .text("du står på.", textStartX, contentY + 120);
 
@@ -747,17 +751,17 @@ async function generateSinglePdf(
           .text(
             "camera lens over the QR code. The link",
             textStartX,
-            contentY + 240
+            contentY + 240,
           )
           .text(
             "takes you to the travel planner, and",
             textStartX,
-            contentY + 260
+            contentY + 260,
           )
           .text(
             "shows bus lines and departures from the",
             textStartX,
-            contentY + 280
+            contentY + 280,
           )
           .text("stop you are at.", textStartX, contentY + 300);
 
@@ -786,7 +790,7 @@ async function generateSinglePdf(
           .text(
             "Information about bus departures",
             rightColumnX,
-            rightColumnStartY + 40
+            rightColumnStartY + 40,
           )
           .text("can also be found:", rightColumnX, rightColumnStartY + 60);
 
@@ -797,7 +801,7 @@ async function generateSinglePdf(
           .text(
             "• I appane / in the apps:",
             rightColumnX,
-            rightColumnStartY + 100
+            rightColumnStartY + 100,
           );
 
         doc
@@ -809,7 +813,7 @@ async function generateSinglePdf(
           .text(
             "• På nettsidene / on the websites:",
             rightColumnX,
-            rightColumnStartY + 155
+            rightColumnStartY + 155,
           );
 
         doc
@@ -817,7 +821,7 @@ async function generateSinglePdf(
           .text(
             "frammr.no / entur.no",
             rightColumnX + 10,
-            rightColumnStartY + 175
+            rightColumnStartY + 175,
           );
       }
 
@@ -830,7 +834,7 @@ async function generateSinglePdf(
           borderMargin,
           boxWidth,
           boxHeight,
-          borderRadius
+          borderRadius,
         )
         .clip()
         .rect(borderMargin, footerY, boxWidth, footerHeight)
@@ -883,8 +887,8 @@ async function generateSinglePdf(
         new Error(
           `PDF generation failed: ${
             error instanceof Error ? error.message : "Unknown error"
-          }`
-        )
+          }`,
+        ),
       );
     }
   });

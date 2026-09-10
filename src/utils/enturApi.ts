@@ -1,4 +1,4 @@
-import axios, { AxiosResponse } from "axios";
+import axios, { type AxiosResponse } from "axios";
 
 export interface StopPlaceInfo {
   id: string;
@@ -53,7 +53,7 @@ export class EnturApiClient {
 
   constructor(
     clientName: string = "nsr-barcode-generator",
-    retryConfig: Partial<RetryConfig> = {}
+    retryConfig: Partial<RetryConfig> = {},
   ) {
     this.clientName = clientName;
     this.retryConfig = {
@@ -88,7 +88,7 @@ export class EnturApiClient {
     // Exponential backoff: baseDelay * (backoffMultiplier ^ attempt)
     const delay =
       this.retryConfig.baseDelay *
-      Math.pow(this.retryConfig.backoffMultiplier, attempt);
+      this.retryConfig.backoffMultiplier ** attempt;
     return Math.min(delay, this.retryConfig.maxDelay);
   }
 
@@ -101,7 +101,7 @@ export class EnturApiClient {
     // Validate ID format
     if (!stopPlaceId.startsWith("NSR:StopPlace:")) {
       const error = new Error(
-        `Invalid stop place ID format: ${stopPlaceId}`
+        `Invalid stop place ID format: ${stopPlaceId}`,
       ) as EnturApiError;
       error.code = "INVALID_ID";
       throw error;
@@ -119,7 +119,7 @@ export class EnturApiClient {
               Accept: "application/json",
             },
             timeout: 10000, // 10 second timeout
-          }
+          },
         );
 
         return this.parseStopPlaceResponse(response.data, stopPlaceId);
@@ -130,7 +130,7 @@ export class EnturApiClient {
           // Handle 404 errors immediately (no retry)
           if (error.response?.status === 404) {
             const apiError = new Error(
-              `Stop place not found: ${stopPlaceId}`
+              `Stop place not found: ${stopPlaceId}`,
             ) as EnturApiError;
             apiError.code = "NOT_FOUND";
             apiError.statusCode = 404;
@@ -151,7 +151,7 @@ export class EnturApiClient {
               console.warn(
                 `Rate limited for stop place ${stopPlaceId}. Retrying in ${delay}ms (attempt ${
                   attempt + 1
-                }/${this.retryConfig.maxRetries})`
+                }/${this.retryConfig.maxRetries})`,
               );
 
               await this.sleep(delay);
@@ -159,7 +159,7 @@ export class EnturApiClient {
             } else {
               // Max retries exceeded for rate limiting
               const rateLimitError = new Error(
-                `Rate limit exceeded for stop place ${stopPlaceId} after ${this.retryConfig.maxRetries} retries`
+                `Rate limit exceeded for stop place ${stopPlaceId} after ${this.retryConfig.maxRetries} retries`,
               ) as EnturApiError;
               rateLimitError.code = "RATE_LIMITED";
               rateLimitError.statusCode = 429;
@@ -180,7 +180,7 @@ export class EnturApiClient {
                   error.response.status
                 } for stop place ${stopPlaceId}. Retrying in ${delay}ms (attempt ${
                   attempt + 1
-                }/${this.retryConfig.maxRetries})`
+                }/${this.retryConfig.maxRetries})`,
               );
               await this.sleep(delay);
               continue; // Retry the request
@@ -188,7 +188,7 @@ export class EnturApiClient {
 
             // For client errors (4xx except 404 and 429), don't retry
             const apiError = new Error(
-              `API error: ${error.response.status} - ${error.response.statusText}`
+              `API error: ${error.response.status} - ${error.response.statusText}`,
             ) as EnturApiError;
             apiError.code = "API_ERROR";
             apiError.statusCode = error.response.status;
@@ -200,14 +200,14 @@ export class EnturApiClient {
               console.warn(
                 `Network error for stop place ${stopPlaceId}. Retrying in ${delay}ms (attempt ${
                   attempt + 1
-                }/${this.retryConfig.maxRetries})`
+                }/${this.retryConfig.maxRetries})`,
               );
               await this.sleep(delay);
               continue; // Retry the request
             }
 
             const networkError = new Error(
-              `Network error: ${error.message}`
+              `Network error: ${error.message}`,
             ) as EnturApiError;
             networkError.code = "NETWORK_ERROR";
             throw networkError;
@@ -225,17 +225,16 @@ export class EnturApiClient {
           console.warn(
             `Unknown error for stop place ${stopPlaceId}. Retrying in ${delay}ms (attempt ${
               attempt + 1
-            }/${this.retryConfig.maxRetries})`
+            }/${this.retryConfig.maxRetries})`,
           );
           await this.sleep(delay);
-          continue; // Retry the request
         }
       }
     }
 
     // If we get here, all retries have been exhausted
     const unknownError = new Error(
-      `All retries exhausted for stop place ${stopPlaceId}. Last error: ${lastError.message}`
+      `All retries exhausted for stop place ${stopPlaceId}. Last error: ${lastError.message}`,
     ) as EnturApiError;
     unknownError.code = "API_ERROR";
     throw unknownError;
@@ -255,7 +254,7 @@ export class EnturApiClient {
       concurrency?: number;
       /** Called once per ID as its metadata fetch completes (success or failure). */
       onProgress?: (event: StopPlaceFetchProgressEvent) => void;
-    } = {}
+    } = {},
   ): Promise<(StopPlaceInfo | null)[]> {
     const {
       batchSize = 100,
@@ -289,7 +288,7 @@ export class EnturApiClient {
       const batchResults = await this.processBatchWithConcurrency(
         batch,
         concurrency,
-        onItemDone
+        onItemDone,
       );
       results.push(...batchResults);
 
@@ -297,8 +296,8 @@ export class EnturApiClient {
       if (i + batchSize < stopPlaceIds.length) {
         console.log(
           `Processed batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(
-            stopPlaceIds.length / batchSize
-          )}. Waiting ${delayBetweenBatches}ms before next batch...`
+            stopPlaceIds.length / batchSize,
+          )}. Waiting ${delayBetweenBatches}ms before next batch...`,
         );
         await this.sleep(delayBetweenBatches);
       }
@@ -316,7 +315,11 @@ export class EnturApiClient {
   private async processBatchWithConcurrency(
     stopPlaceIds: string[],
     concurrency: number,
-    onItemDone?: (id: string, status: "fetched" | "error", error?: string) => void
+    onItemDone?: (
+      id: string,
+      status: "fetched" | "error",
+      error?: string,
+    ) => void,
   ): Promise<(StopPlaceInfo | null)[]> {
     const results: (StopPlaceInfo | null)[] = new Array(stopPlaceIds.length);
 
@@ -333,7 +336,7 @@ export class EnturApiClient {
         } catch (error) {
           console.warn(
             `Failed to fetch stop place ${id}:`,
-            (error as Error).message
+            (error as Error).message,
           );
           results[globalIndex] = null;
           onItemDone?.(id, "error", (error as Error).message);
@@ -419,7 +422,7 @@ export class EnturApiClient {
  * @returns EnturApiClient with conservative settings
  */
 export function createConservativeEnturClient(
-  clientName?: string
+  clientName?: string,
 ): EnturApiClient {
   return new EnturApiClient(clientName, {
     maxRetries: 5,

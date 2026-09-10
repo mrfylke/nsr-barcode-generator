@@ -31,6 +31,11 @@
     "clean": "rimraf dist",
     "test": "vitest run",
     "test:watch": "vitest",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
+    "format": "biome format --write .",
+    "check": "biome check .",
+    "check:fix": "biome check --write .",
     "prepublishOnly": "pnpm run clean && pnpm run build && pnpm run test"
   },
   "keywords": [
@@ -47,6 +52,7 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "@biomejs/biome": "^2.5.12",
     "@types/node": "^26.5.0",
     "@types/pdfkit": "^0.17.6",
     "@types/qrcode": "^1.5.6",

@@ -22,7 +22,7 @@ export interface IdParseError extends Error {
 export async function parseUniqueIds(content: string): Promise<IdParseResult> {
   if (!content || content.trim().length === 0) {
     const error = new Error(
-      "File is empty or contains no content"
+      "File is empty or contains no content",
     ) as IdParseError;
     error.code = "EMPTY_FILE";
     throw error;
@@ -46,7 +46,7 @@ export async function parseUniqueIds(content: string): Promise<IdParseResult> {
     // Validate ID format (basic validation - non-empty, no whitespace)
     if (trimmedLine.includes(" ") || trimmedLine.includes("\t")) {
       const error = new Error(
-        `Invalid ID format: IDs cannot contain whitespace. Found: "${trimmedLine}"`
+        `Invalid ID format: IDs cannot contain whitespace. Found: "${trimmedLine}"`,
       ) as IdParseError;
       error.code = "INVALID_FORMAT";
       throw error;

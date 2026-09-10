@@ -5,27 +5,27 @@
 
 import { readFile } from "./utils/fileReader";
 import {
-  parseUniqueIds,
   formatIdCountResult,
   IdParseError,
   IdParseResult,
+  parseUniqueIds,
 } from "./utils/idParser";
+import { extractStopPlaceNumber, isValidNsrStopPlaceId } from "./utils/nsrId";
 import {
-  generatePdfsForStopPlaces,
-  PdfGenerationOptions,
-  PdfGenerationResult,
-  PdfGenerationItemResult,
-  PdfGenerationFailure,
-  PdfProgressEvent,
   DataFetchingProgressEvent,
   GenerationProgressEvent,
+  generatePdfsForStopPlaces,
+  PdfGenerationFailure,
+  PdfGenerationItemResult,
+  PdfGenerationOptions,
+  PdfGenerationResult,
+  PdfProgressEvent,
   PdfStyleConfig,
-  StopPlaceQrContext,
   StopPlaceId,
   StopPlaceInput,
+  StopPlaceQrContext,
   StopPlaceRequest,
 } from "./utils/pdfGenerator";
-import { isValidNsrStopPlaceId, extractStopPlaceNumber } from "./utils/nsrId";
 
 /**
  * Options shared by all PDF-generating API entry points, beyond the base
@@ -134,7 +134,7 @@ export interface ValidationResult {
  */
 function buildPdfOptions(
   outputDirectory: string,
-  options: CommonPdfOptions
+  options: CommonPdfOptions,
 ): PdfGenerationOptions {
   const pdfOptions: PdfGenerationOptions = { outputDirectory };
   if (options.assetsDirectory) {
@@ -177,7 +177,7 @@ export class NsrBarcodeApi {
    * @returns Promise that resolves to the processing result
    */
   static async processFile(
-    options: ProcessFileOptions
+    options: ProcessFileOptions,
   ): Promise<ProcessFileResult> {
     const { filePath, outputDirectory } = options;
 
@@ -197,7 +197,10 @@ export class NsrBarcodeApi {
 
       // Generate PDFs for all unique IDs
       const pdfOptions = buildPdfOptions(outputDirectory, options);
-      const pdfResult = await generatePdfsForStopPlaces(uniqueIdsArray, pdfOptions);
+      const pdfResult = await generatePdfsForStopPlaces(
+        uniqueIdsArray,
+        pdfOptions,
+      );
 
       // Create summary
       const parseSummary = formatIdCountResult(parseResult);
@@ -223,7 +226,7 @@ export class NsrBarcodeApi {
    * @returns Promise that resolves to the generation result
    */
   static async generateSinglePdf(
-    options: GenerateSinglePdfOptions
+    options: GenerateSinglePdfOptions,
   ): Promise<GenerateSinglePdfResult> {
     const { nsrId, outputDirectory, name, transportMode } = options;
 
@@ -241,7 +244,8 @@ export class NsrBarcodeApi {
       const pdfOptions = buildPdfOptions(outputDirectory, options);
       const pdfResult = await generatePdfsForStopPlaces([request], pdfOptions);
 
-      const success = pdfResult.totalGenerated > 0 || pdfResult.skipped.length > 0;
+      const success =
+        pdfResult.totalGenerated > 0 || pdfResult.skipped.length > 0;
       const summary = success
         ? `Successfully generated PDF for ${nsrId} in ${pdfResult.outputDirectory}`
         : `Failed to generate PDF for ${nsrId}`;
@@ -271,7 +275,7 @@ export class NsrBarcodeApi {
    */
   static async generateMultiplePdfs(
     stopPlaces: StopPlaceRequest[],
-    options: PdfGenerationOptions
+    options: PdfGenerationOptions,
   ): Promise<PdfGenerationResult> {
     // Validate all NSR IDs
     for (const request of stopPlaces) {
@@ -331,22 +335,22 @@ export class NsrBarcodeApi {
 
 // Export types and errors for external use
 export {
-  IdParseResult,
+  DataFetchingProgressEvent,
+  extractStopPlaceNumber,
+  formatIdCountResult,
+  GenerationProgressEvent,
   IdParseError,
+  IdParseResult,
+  PdfGenerationFailure,
+  PdfGenerationItemResult,
   PdfGenerationOptions,
   PdfGenerationResult,
-  PdfGenerationItemResult,
-  PdfGenerationFailure,
   PdfProgressEvent,
-  DataFetchingProgressEvent,
-  GenerationProgressEvent,
   PdfStyleConfig,
-  StopPlaceQrContext,
   StopPlaceId,
   StopPlaceInput,
+  StopPlaceQrContext,
   StopPlaceRequest,
-  formatIdCountResult,
-  extractStopPlaceNumber,
 };
 
 // Default export

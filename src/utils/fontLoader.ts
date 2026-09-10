@@ -35,12 +35,12 @@ export class FontLoader {
     const regularPath = resolveAssetPath(
       assetsDirectory,
       "fonts",
-      "poppins-400-normal.ttf"
+      "poppins-400-normal.ttf",
     );
     const boldPath = resolveAssetPath(
       assetsDirectory,
       "fonts",
-      "poppins-700-normal.ttf"
+      "poppins-700-normal.ttf",
     );
 
     try {
@@ -55,7 +55,7 @@ export class FontLoader {
     } catch (error) {
       console.warn(
         "Failed to read bundled Poppins fonts, falling back to Helvetica:",
-        error instanceof Error ? error.message : error
+        error instanceof Error ? error.message : error,
       );
       this.cachedFontFamilies.set(cacheKey, HELVETICA_FALLBACK);
       return HELVETICA_FALLBACK;
