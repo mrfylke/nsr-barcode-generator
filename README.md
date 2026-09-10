@@ -50,7 +50,7 @@ interface PdfGenerationOptions {
   orientation?: "landscape" | "portrait";     // default "landscape"
   style?: PdfStyleConfig;                     // colors/logo, see below
   overwrite?: boolean;                        // replace existing files (default false = skip)
-  onProgress?: (event: PdfProgressEvent) => void;
+  onProgress?: (event: PdfProgressEvent) => void;  // see "Result & progress" below
 
   // Custom QR payload. Called once metadata is resolved; the returned
   // string is used verbatim (no rewriting). Must be an absolute http(s)
@@ -117,7 +117,18 @@ interface PdfGenerationResult {
   outputDirectory: string;
 }
 
-interface PdfProgressEvent {
+// Discriminated union on `type`. Fetching events precede generation events.
+type PdfProgressEvent = DataFetchingProgressEvent | GenerationProgressEvent;
+
+interface DataFetchingProgressEvent {
+  type: "data-fetching";
+  current: number; total: number; nsrId: string;
+  status: "fetched" | "error";
+  error?: string;
+}
+
+interface GenerationProgressEvent {
+  type: "generation";
   current: number; total: number; nsrId: string;
   outputPath?: string;
   status: "generated" | "skipped" | "error";
@@ -125,11 +136,11 @@ interface PdfProgressEvent {
 }
 ```
 
-`onProgress` fires once per requested ID. One item failing never aborts the batch.
+`onProgress` first fires once per ID needing an Entur lookup (`type: "data-fetching"`), then once per requested ID as PDFs are written (`type: "generation"`). One item failing never aborts the batch. Fetching events are only emitted for the built-in Entur client - a custom `stopPlaceFetcher` does not report fetch progress.
 
 ### Types
 
-`ProcessFileOptions/Result`, `GenerateSinglePdfOptions/Result`, `PdfGenerationOptions/Result`, `PdfProgressEvent`, `PdfStyleConfig`, `StopPlaceQrContext`, `StopPlaceId`/`StopPlaceInput`/`StopPlaceRequest`, `ValidationResult`, `IdParseResult`/`IdParseError` are all exported.
+`ProcessFileOptions/Result`, `GenerateSinglePdfOptions/Result`, `PdfGenerationOptions/Result`, `PdfProgressEvent`, `DataFetchingProgressEvent`, `GenerationProgressEvent`, `PdfStyleConfig`, `StopPlaceQrContext`, `StopPlaceId`/`StopPlaceInput`/`StopPlaceRequest`, `ValidationResult`, `IdParseResult`/`IdParseError` are all exported.
 
 ### NSR ID format & filenames
 
@@ -148,6 +159,8 @@ nsr-barcode id NSR:StopPlace:39598 -o ./output   # same options as above
 nsr-barcode validate NSR:StopPlace:39598          # check ID format only
 nsr-barcode parse ids.txt                         # list unique IDs, no PDFs
 ```
+
+`file` and `id` print one line per `onProgress` event as they happen - Entur lookups first (`[fetching n/total] ...`), then PDF writes (`[generating n/total] ...`) - followed by the final summary.
 
 ## Embeddability
 

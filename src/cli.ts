@@ -6,10 +6,50 @@
  */
 
 import { Command } from "commander";
-import { NsrBarcodeApi, IdParseError, PdfStyleConfig } from "./api";
+import {
+  NsrBarcodeApi,
+  IdParseError,
+  PdfStyleConfig,
+  PdfProgressEvent,
+} from "./api";
 import { version } from "../package.json";
 
 const program = new Command();
+
+/**
+ * Prints each progress event to the console as it arrives, distinguishing
+ * Entur metadata fetching from PDF generation.
+ */
+function logProgress(event: PdfProgressEvent): void {
+  if (event.type === "data-fetching") {
+    if (event.status === "error") {
+      console.log(
+        `[fetching ${event.current}/${event.total}] ${event.nsrId} - failed: ${event.error}`
+      );
+    } else {
+      console.log(`[fetching ${event.current}/${event.total}] ${event.nsrId}`);
+    }
+    return;
+  }
+
+  switch (event.status) {
+    case "generated":
+      console.log(
+        `[generating ${event.current}/${event.total}] ${event.nsrId} -> ${event.outputPath}`
+      );
+      break;
+    case "skipped":
+      console.log(
+        `[generating ${event.current}/${event.total}] ${event.nsrId} - skipped (already exists)`
+      );
+      break;
+    case "error":
+      console.log(
+        `[generating ${event.current}/${event.total}] ${event.nsrId} - failed: ${event.error}`
+      );
+      break;
+  }
+}
 
 program
   .name("nsr-barcode")
@@ -113,6 +153,7 @@ program
           {
             filePath,
             outputDirectory: options.output,
+            onProgress: logProgress,
           };
         if (format && format !== "A4") {
           processOptions.format = format;
@@ -242,6 +283,7 @@ program
         >[0] = {
           nsrId,
           outputDirectory: options.output,
+          onProgress: logProgress,
         };
         if (format && format !== "A4") {
           generateOptions.format = format;

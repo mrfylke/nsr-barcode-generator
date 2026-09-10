@@ -32,6 +32,18 @@ export interface RetryConfig {
 }
 
 /**
+ * Per-item progress event emitted while {@link EnturApiClient.getMultipleStopPlaces}
+ * fetches stop place metadata.
+ */
+export interface StopPlaceFetchProgressEvent {
+  current: number;
+  total: number;
+  nsrId: string;
+  status: "fetched" | "error";
+  error?: string;
+}
+
+/**
  * Entur API client for fetching stop place information
  */
 export class EnturApiClient {
@@ -241,15 +253,33 @@ export class EnturApiClient {
       batchSize?: number;
       delayBetweenBatches?: number;
       concurrency?: number;
+      /** Called once per ID as its metadata fetch completes (success or failure). */
+      onProgress?: (event: StopPlaceFetchProgressEvent) => void;
     } = {}
   ): Promise<(StopPlaceInfo | null)[]> {
     const {
       batchSize = 100,
       delayBetweenBatches = 1000,
       concurrency = 5,
+      onProgress,
     } = options;
 
     const results: (StopPlaceInfo | null)[] = [];
+    const total = stopPlaceIds.length;
+    let completed = 0;
+
+    const onItemDone = onProgress
+      ? (id: string, status: "fetched" | "error", error?: string) => {
+          completed++;
+          onProgress({
+            current: completed,
+            total,
+            nsrId: id,
+            status,
+            ...(error ? { error } : {}),
+          });
+        }
+      : undefined;
 
     // Process in batches to avoid overwhelming the API
     for (let i = 0; i < stopPlaceIds.length; i += batchSize) {
@@ -258,7 +288,8 @@ export class EnturApiClient {
       // Process batch with limited concurrency
       const batchResults = await this.processBatchWithConcurrency(
         batch,
-        concurrency
+        concurrency,
+        onItemDone
       );
       results.push(...batchResults);
 
@@ -284,7 +315,8 @@ export class EnturApiClient {
    */
   private async processBatchWithConcurrency(
     stopPlaceIds: string[],
-    concurrency: number
+    concurrency: number,
+    onItemDone?: (id: string, status: "fetched" | "error", error?: string) => void
   ): Promise<(StopPlaceInfo | null)[]> {
     const results: (StopPlaceInfo | null)[] = new Array(stopPlaceIds.length);
 
@@ -297,12 +329,14 @@ export class EnturApiClient {
         try {
           const result = await this.getStopPlace(id);
           results[globalIndex] = result;
+          onItemDone?.(id, "fetched");
         } catch (error) {
           console.warn(
             `Failed to fetch stop place ${id}:`,
             (error as Error).message
           );
           results[globalIndex] = null;
+          onItemDone?.(id, "error", (error as Error).message);
         }
       });
 

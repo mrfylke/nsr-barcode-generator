@@ -17,6 +17,8 @@ import {
   PdfGenerationItemResult,
   PdfGenerationFailure,
   PdfProgressEvent,
+  DataFetchingProgressEvent,
+  GenerationProgressEvent,
   PdfStyleConfig,
   StopPlaceQrContext,
   StopPlaceId,
@@ -45,7 +47,12 @@ interface CommonPdfOptions {
   generateQrUrl?: (stopPlace: StopPlaceQrContext) => string;
   /** Replace existing output files instead of skipping them (defaults to false) */
   overwrite?: boolean;
-  /** Called once per requested NSR ID as generation progresses */
+  /**
+   * Called once per requested NSR ID as processing progresses - first with
+   * `type: "data-fetching"` events while stop place metadata is resolved
+   * from Entur, then with `type: "generation"` events as each PDF is
+   * written.
+   */
   onProgress?: (event: PdfProgressEvent) => void;
   /** Overrides how stop place metadata is fetched (defaults to the Entur API) */
   stopPlaceFetcher?: PdfGenerationOptions["stopPlaceFetcher"];
@@ -331,6 +338,8 @@ export {
   PdfGenerationItemResult,
   PdfGenerationFailure,
   PdfProgressEvent,
+  DataFetchingProgressEvent,
+  GenerationProgressEvent,
   PdfStyleConfig,
   StopPlaceQrContext,
   StopPlaceId,

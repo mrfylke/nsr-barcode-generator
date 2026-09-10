@@ -3,7 +3,7 @@ import { promises as fs } from "fs";
 import { resolve, join } from "path";
 import { createWriteStream } from "fs";
 import * as QRCode from "qrcode";
-import { enturApi, StopPlaceInfo } from "./enturApi";
+import { enturApi, StopPlaceInfo, StopPlaceFetchProgressEvent } from "./enturApi";
 import { fontLoader } from "./fontLoader";
 import { resolveAssetPath } from "./assets";
 
@@ -32,9 +32,23 @@ export interface StopPlaceQrContext {
 }
 
 /**
- * Per-item progress event emitted during batch PDF generation.
+ * Per-item progress event emitted while stop place metadata is being fetched
+ * from Entur (or a custom `stopPlaceFetcher`), ahead of PDF generation.
  */
-export interface PdfProgressEvent {
+export interface DataFetchingProgressEvent {
+  type: "data-fetching";
+  current: number;
+  total: number;
+  nsrId: string;
+  status: "fetched" | "error";
+  error?: string;
+}
+
+/**
+ * Per-item progress event emitted as each requested PDF is generated.
+ */
+export interface GenerationProgressEvent {
+  type: "generation";
   current: number;
   total: number;
   nsrId: string;
@@ -42,6 +56,15 @@ export interface PdfProgressEvent {
   status: "generated" | "skipped" | "error";
   error?: string;
 }
+
+/**
+ * Progress event emitted during batch PDF generation, distinguished by
+ * `type` - `"data-fetching"` while stop place metadata is being resolved
+ * from Entur, `"generation"` while PDFs are being written.
+ */
+export type PdfProgressEvent =
+  | DataFetchingProgressEvent
+  | GenerationProgressEvent;
 
 /**
  * Full NSR ID string, e.g. "NSR:StopPlace:10003". Aliased purely for
@@ -96,7 +119,14 @@ export interface PdfGenerationOptions {
   style?: PdfStyleConfig;
   /** Replace an existing output file instead of skipping it (defaults to false) */
   overwrite?: boolean;
-  /** Called once per requested NSR ID as batch generation progresses */
+  /**
+   * Called once per requested NSR ID as batch processing progresses -
+   * first with `type: "data-fetching"` events while stop place metadata is
+   * resolved from Entur, then with `type: "generation"` events as each PDF
+   * is written. Note: fetching events are only emitted for the built-in
+   * Entur fetcher; a custom `stopPlaceFetcher` does not report fetch
+   * progress.
+   */
   onProgress?: (event: PdfProgressEvent) => void;
   /**
    * Overrides how stop place metadata is fetched for requests that are bare
@@ -186,7 +216,22 @@ export async function generatePdfsForStopPlaces(
   if (idsNeedingFetch.length > 0) {
     const fetchStopPlaces =
       options.stopPlaceFetcher ??
-      ((idsToFetch: string[]) => enturApi.getMultipleStopPlaces(idsToFetch));
+      ((idsToFetch: string[]) =>
+        enturApi.getMultipleStopPlaces(idsToFetch, {
+          ...(onProgress
+            ? {
+                onProgress: (event: StopPlaceFetchProgressEvent) =>
+                  onProgress({
+                    type: "data-fetching",
+                    current: event.current,
+                    total: event.total,
+                    nsrId: event.nsrId,
+                    status: event.status,
+                    ...(event.error ? { error: event.error } : {}),
+                  }),
+              }
+            : {}),
+        }));
     fetchedInfos = await fetchStopPlaces(idsNeedingFetch);
   }
   const fetchedById = new Map<string, StopPlaceInfo | null>(
@@ -228,6 +273,7 @@ export async function generatePdfsForStopPlaces(
       if (!overwrite && (await pathExists(outputPath))) {
         skipped.push({ nsrId: id, outputPath });
         onProgress?.({
+          type: "generation",
           current,
           total,
           nsrId: id,
@@ -241,6 +287,7 @@ export async function generatePdfsForStopPlaces(
       await generateSinglePdf(id, outputPath, stopPlaceInfo, options);
       generated.push({ nsrId: id, outputPath });
       onProgress?.({
+        type: "generation",
         current,
         total,
         nsrId: id,
@@ -250,7 +297,14 @@ export async function generatePdfsForStopPlaces(
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       failed.push({ nsrId: id, error: message });
-      onProgress?.({ current, total, nsrId: id, status: "error", error: message });
+      onProgress?.({
+        type: "generation",
+        current,
+        total,
+        nsrId: id,
+        status: "error",
+        error: message,
+      });
     }
   }
 
