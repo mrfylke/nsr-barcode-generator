@@ -237,23 +237,23 @@ export async function generatePdfsForStopPlaces(
         enturApi.getMultipleStopPlaces(idsToFetch, {
           ...(onProgress
             ? {
-                onProgress: (event: StopPlaceFetchProgressEvent) =>
-                  onProgress({
-                    type: "data-fetching",
-                    current: event.current,
-                    total: event.total,
-                    nsrId: event.nsrId,
-                    status: event.status,
-                    ...(event.error ? { error: event.error } : {}),
-                  }),
-                onBatchComplete: (event: StopPlaceBatchProgressEvent) =>
-                  onProgress({
-                    type: "data-fetching-batch",
-                    batchNumber: event.batchNumber,
-                    totalBatches: event.totalBatches,
-                    delayMs: event.delayMs,
-                  }),
-              }
+              onProgress: (event: StopPlaceFetchProgressEvent) =>
+                onProgress({
+                  type: "data-fetching",
+                  current: event.current,
+                  total: event.total,
+                  nsrId: event.nsrId,
+                  status: event.status,
+                  ...(event.error ? { error: event.error } : {}),
+                }),
+              onBatchComplete: (event: StopPlaceBatchProgressEvent) =>
+                onProgress({
+                  type: "data-fetching-batch",
+                  batchNumber: event.batchNumber,
+                  totalBatches: event.totalBatches,
+                  delayMs: event.delayMs,
+                }),
+            }
             : {}),
         }));
     fetchedInfos = await fetchStopPlaces(idsNeedingFetch);
@@ -695,11 +695,11 @@ async function generateSinglePdf(
         .fillColor(darkGray)
         .fontSize(14)
         .font(poppinsRegular)
-        .text("• I appane / in the apps:", rightColumnX, infoStartY + 100);
+        .text("• I appen / in the app:", rightColumnX, infoStartY + 100);
 
       doc
         .font(poppinsBold)
-        .text("FRAM / Entur", rightColumnX + 10, infoStartY + 120);
+        .text("Entur", rightColumnX + 10, infoStartY + 120);
 
       doc
         .font(poppinsRegular)
@@ -892,8 +892,7 @@ async function generateSinglePdf(
     doc.end();
   } catch (error) {
     throw new Error(
-      `PDF generation failed: ${
-        error instanceof Error ? error.message : "Unknown error"
+      `PDF generation failed: ${error instanceof Error ? error.message : "Unknown error"
       }`,
     );
   }
