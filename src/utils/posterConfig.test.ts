@@ -3,8 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  loadFramPosterConfig,
+  builtInPosterConfigNames,
+  loadBuiltInPosterConfig,
   loadPosterConfig,
+  loadPosterConfigSource,
   renderPosterTemplate,
   validatePosterConfig,
 } from "./posterConfig";
@@ -20,7 +22,7 @@ describe("poster configuration", () => {
       "fram-poster.json",
     );
     const raw = JSON.parse(await fs.readFile(configPath, "utf8"));
-    const config = await loadFramPosterConfig();
+    const config = await loadBuiltInPosterConfig("fram");
 
     expect(validatePosterConfig(raw).version).toBe(1);
     expect(config.colors.headerFooter).toBe("#1A4D75");
@@ -42,6 +44,22 @@ describe("poster configuration", () => {
     const schemaPath = path.resolve(path.dirname(configPath), raw.$schema);
     const schema = JSON.parse(await fs.readFile(schemaPath, "utf8"));
     expect(schema.$schema).toBe("https://json-schema.org/draft/2020-12/schema");
+  });
+
+  it("exposes and resolves the FRAM built-in config pack", async () => {
+    expect(builtInPosterConfigNames).toEqual(["fram"]);
+    await expect(loadPosterConfigSource("fram")).resolves.toMatchObject({
+      version: 1,
+      colors: { headerFooter: "#1A4D75" },
+    });
+  });
+
+  it("reports the available packs for an unknown built-in name", () => {
+    expect(() =>
+      loadBuiltInPosterConfig(
+        "unknown" as Parameters<typeof loadBuiltInPosterConfig>[0],
+      ),
+    ).toThrow(/Available packs: fram/);
   });
 
   it("resolves a custom logo path relative to the config file", async () => {
@@ -71,7 +89,7 @@ describe("poster configuration", () => {
   });
 
   it("rejects unsupported properties and invalid colors", async () => {
-    const config = await loadFramPosterConfig();
+    const config = await loadBuiltInPosterConfig("fram");
 
     expect(() => validatePosterConfig({ ...config, unexpected: true })).toThrow(
       /unexpected is not supported/,

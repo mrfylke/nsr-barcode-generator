@@ -36,7 +36,8 @@ class NsrBarcodeApi {
   static parseIds(content: string): Promise<IdParseResult>;
   static parseIdsFromFile(filePath: string): Promise<IdParseResult>;
   static loadPosterConfig(filePath: string): Promise<PosterConfig>;
-  static loadFramPosterConfig(assetsDirectory?: string): Promise<PosterConfig>;
+  static loadBuiltInPosterConfig(name: BuiltInPosterConfigName, assetsDirectory?: string): Promise<PosterConfig>;
+  static loadPosterConfigSource(source: string, assetsDirectory?: string): Promise<PosterConfig>;
   static validatePosterConfig(value: unknown): PosterConfig;
 }
 ```
@@ -51,8 +52,7 @@ interface PdfGenerationOptions {
   assetsDirectory?: string;                       // copied package assets for bundled executables
   format?: "A4" | "A3" | "Letter";           // default "A4"
   orientation?: "landscape" | "portrait";     // default "landscape"
-  style?: PdfStyleConfig;                     // colors/logo, see below
-  posterConfig?: PosterConfig;                // complete content/branding config
+  posterConfig?: PosterConfig | "fram";       // default "fram"
   overwrite?: boolean;                        // replace existing files (default false = skip)
   onProgress?: (event: PdfProgressEvent) => void;  // see "Result & progress" below
 
@@ -68,14 +68,6 @@ interface PdfGenerationOptions {
 
   // See "Supplying stop place data" below.
   enrichTransportMode?: boolean;              // default false
-}
-
-interface PdfStyleConfig {
-  headerFooterColor?: string;   // default "#1A4D75"
-  logoPath?: string;            // default: bundled FRAM logo
-  logoWidth?: number;           // default 105
-  fallbackLogoText?: string;    // default "FRAM"
-  fallbackLogoSubtext?: string; // default "Møre og Romsdal fylkeskommune"
 }
 ```
 
@@ -96,6 +88,13 @@ await NsrBarcodeApi.generateSinglePdf({
   outputDirectory: "./output",
   posterConfig,
 });
+
+// Built-in packs can be selected without loading a file:
+await NsrBarcodeApi.generateSinglePdf({
+  nsrId: "NSR:StopPlace:39598",
+  outputDirectory: "./output",
+  posterConfig: "fram",
+});
 ```
 
 Copy [`assets/config/fram-poster.json`](assets/config/fram-poster.json) as a
@@ -113,8 +112,15 @@ supported in poster text and `qrUrlTemplate`:
 - `{{encodedStopName}}` and `{{encodedNsrId}}` for URL-safe values
 
 `generateQrUrl` takes precedence over `qrUrlTemplate` when both are supplied.
-The legacy `style` option remains supported and overrides matching colors/logo
-fields from `posterConfig`.
+
+Available built-in packs are exported as `builtInPosterConfigNames`; currently
+the only pack is `fram`. Omitting `posterConfig` also selects `fram`.
+
+Branding is configured exclusively through `posterConfig`. The former API
+`style` object and CLI flags `--header-color`, `--logo-path`, `--logo-width`,
+`--fallback-text`, and `--fallback-subtext` have been removed. Their values map
+to `colors.headerFooter` and the corresponding fields under `logo` in the JSON
+configuration.
 
 When bundling the API into an executable, copy this package's `assets/`
 directory alongside the application and pass its absolute path as
@@ -190,7 +196,7 @@ interface GenerationProgressEvent {
 
 ### Types
 
-`ProcessFileOptions/Result`, `GenerateSinglePdfOptions/Result`, `PdfGenerationOptions/Result`, `PdfProgressEvent`, `DataFetchingProgressEvent`, `DataFetchingBatchProgressEvent`, `GenerationProgressEvent`, `PdfStyleConfig`, `PosterConfig` and its nested configuration types, `StopPlaceQrContext`, `StopPlaceId`/`StopPlaceInput`/`StopPlaceRequest`, `ValidationResult`, `IdParseResult`/`IdParseError` are all exported.
+`ProcessFileOptions/Result`, `GenerateSinglePdfOptions/Result`, `PdfGenerationOptions/Result`, `PdfProgressEvent`, `DataFetchingProgressEvent`, `DataFetchingBatchProgressEvent`, `GenerationProgressEvent`, `PosterConfig`, `PosterConfigSource`, `BuiltInPosterConfigName` and the nested configuration types, `StopPlaceQrContext`, `StopPlaceId`/`StopPlaceInput`/`StopPlaceRequest`, `ValidationResult`, `IdParseResult`/`IdParseError` are all exported.
 
 ### NSR ID format & filenames
 
@@ -202,16 +208,14 @@ Output files are named `{NSR_ID}-{slugified-name}.pdf`, e.g. `NSR_StopPlace_3959
 
 ```bash
 nsr-barcode file ids.txt -o ./output [-f A4|A3|Letter] [--orientation landscape|portrait] [--overwrite] \
-  [--config ./my-authority-poster.json] \
-  [--header-color "#2E8B57"] [--logo-path ./logo.png] [--logo-width 120] \
-  [--fallback-text "MY ORG"] [--fallback-subtext "Subtitle"]
+  [--config fram|./my-authority-poster.json]
 
-nsr-barcode id NSR:StopPlace:39598 -o ./output   # same options as above
+nsr-barcode id NSR:StopPlace:39598 -o ./output --config fram
 nsr-barcode validate NSR:StopPlace:39598          # check ID format only
 nsr-barcode parse ids.txt                         # list unique IDs, no PDFs
 ```
 
-Both `file` and `id` accept `-c, --config <file>`. They print one line per
+Both `file` and `id` accept `-c, --config <pack-or-file>`. They print one line per
 `onProgress` event as it happens - Entur lookups first (`[fetching n/total]
 ...`), with a `Processed batch n/total. Waiting <ms>ms before next batch...`
 line whenever fetches are large enough to be throttled into batches, then PDF

@@ -29,7 +29,7 @@ vi.mock("qrcode", () => {
 
 const { generatePdfsForStopPlaces } = await import("./pdfGenerator");
 const { NsrBarcodeApi } = await import("../api");
-const { loadFramPosterConfig } = await import("./posterConfig");
+const { loadBuiltInPosterConfig } = await import("./posterConfig");
 
 function stopPlace(
   id: string,
@@ -127,7 +127,7 @@ describe("generatePdfsForStopPlaces", () => {
   it("uses the explicit FRAM config identically to the implicit default", async () => {
     const defaultOutputDirectory = await makeTempDir();
     const configuredOutputDirectory = await makeTempDir();
-    const posterConfig = await loadFramPosterConfig();
+    const posterConfig = await loadBuiltInPosterConfig("fram");
     const request = {
       id: "NSR:StopPlace:10003",
       name: "Same FRAM Poster",
@@ -157,9 +157,24 @@ describe("generatePdfsForStopPlaces", () => {
     expect(readMediaBox(defaultPdf)).toEqual(readMediaBox(configuredPdf));
   });
 
+  it("accepts a built-in poster config pack name through the API", async () => {
+    const outputDirectory = await makeTempDir();
+
+    const result = await generatePdfsForStopPlaces(
+      [{ id: "NSR:StopPlace:10003", name: "Named FRAM Pack" }],
+      { outputDirectory, posterConfig: "fram" },
+    );
+
+    expect(result.failed).toEqual([]);
+    expect(result.generated).toHaveLength(1);
+    expect(capturedQrUrls).toEqual([
+      "https://reise.frammr.no/departures/NSR%3AStopPlace%3A10003?qr",
+    ]);
+  });
+
   it("uses custom poster QR URL templates and supports posters without a logo", async () => {
     const outputDirectory = await makeTempDir();
-    const posterConfig = await loadFramPosterConfig();
+    const posterConfig = await loadBuiltInPosterConfig("fram");
     posterConfig.logo = null;
     posterConfig.qrUrlTemplate =
       "https://example.no/stops/{{encodedNsrId}}?name={{encodedStopName}}";

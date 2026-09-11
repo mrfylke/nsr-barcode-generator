@@ -21,17 +21,20 @@ import {
   PdfGenerationOptions,
   PdfGenerationResult,
   PdfProgressEvent,
-  PdfStyleConfig,
   StopPlaceId,
   StopPlaceInput,
   StopPlaceQrContext,
   StopPlaceRequest,
 } from "./utils/pdfGenerator";
 import {
-  loadFramPosterConfig,
+  BuiltInPosterConfigName,
+  builtInPosterConfigNames,
+  loadBuiltInPosterConfig,
   loadPosterConfig,
+  loadPosterConfigSource,
   PosterColors,
   PosterConfig,
+  PosterConfigSource,
   PosterLayoutConfig,
   PosterLogoConfig,
   PosterSection,
@@ -41,7 +44,7 @@ import {
 
 /**
  * Options shared by all PDF-generating API entry points, beyond the base
- * output/format/orientation/style options.
+ * output/format/orientation options.
  */
 interface CommonPdfOptions {
   /** Absolute path to copied package assets for bundled executables. */
@@ -50,10 +53,8 @@ interface CommonPdfOptions {
   format?: "A4" | "A3" | "Letter";
   /** PDF orientation (defaults to landscape) */
   orientation?: "landscape" | "portrait";
-  /** Style configuration for PDF appearance */
-  style?: PdfStyleConfig;
-  /** Complete poster content and branding configuration. */
-  posterConfig?: PosterConfig;
+  /** Complete poster configuration or a built-in pack name such as `fram`. */
+  posterConfig?: PosterConfigSource;
   /**
    * Builds the complete QR code URL for a stop place. Falls back to the
    * package's built-in departures URL when omitted.
@@ -159,9 +160,6 @@ function buildPdfOptions(
   }
   if (options.orientation) {
     pdfOptions.orientation = options.orientation;
-  }
-  if (options.style) {
-    pdfOptions.style = options.style;
   }
   if (options.posterConfig) {
     pdfOptions.posterConfig = options.posterConfig;
@@ -355,13 +353,17 @@ export const NsrBarcodeApi = {
   validateNsrId,
   parseIds,
   parseIdsFromFile,
+  builtInPosterConfigNames,
   loadPosterConfig,
-  loadFramPosterConfig,
+  loadBuiltInPosterConfig,
+  loadPosterConfigSource,
   validatePosterConfig,
 };
 
 // Export types and errors for external use
 export {
+  BuiltInPosterConfigName,
+  builtInPosterConfigNames,
   DataFetchingBatchProgressEvent,
   DataFetchingProgressEvent,
   extractStopPlaceNumber,
@@ -374,9 +376,9 @@ export {
   PdfGenerationOptions,
   PdfGenerationResult,
   PdfProgressEvent,
-  PdfStyleConfig,
   PosterColors,
   PosterConfig,
+  PosterConfigSource,
   PosterLayoutConfig,
   PosterLogoConfig,
   PosterSection,

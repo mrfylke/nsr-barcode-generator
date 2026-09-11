@@ -11,24 +11,11 @@ import {
 } from "./enturApi";
 import { fontLoader } from "./fontLoader";
 import {
-  loadFramPosterConfig,
   type PosterConfig,
+  type PosterConfigSource,
   renderPosterTemplate,
-  validatePosterConfig,
+  resolvePosterConfig,
 } from "./posterConfig";
-
-export interface PdfStyleConfig {
-  /** Color for header and footer background (hex color) */
-  headerFooterColor?: string;
-  /** Path to logo image file for lower right corner */
-  logoPath?: string;
-  /** Logo width in pixels (height will be calculated to maintain aspect ratio) */
-  logoWidth?: number;
-  /** Fallback text to display if logo cannot be loaded */
-  fallbackLogoText?: string;
-  /** Additional fallback text (subtitle) */
-  fallbackLogoSubtext?: string;
-}
 
 /**
  * Context passed to a `generateQrUrl` callback once Entur metadata has been
@@ -138,14 +125,11 @@ export interface PdfGenerationOptions {
    * package's built-in departures URL for backward compatibility.
    */
   generateQrUrl?: (stopPlace: StopPlaceQrContext) => string;
-  /** Style configuration for PDF appearance */
-  style?: PdfStyleConfig;
   /**
-   * Complete, versioned poster definition. When omitted, the bundled FRAM
-   * configuration is used. The legacy `style` options override the matching
-   * values in this configuration for backward compatibility.
+   * Complete poster definition or the name of a built-in poster pack. When
+   * omitted, the bundled `fram` pack is used.
    */
-  posterConfig?: PosterConfig;
+  posterConfig?: PosterConfigSource;
   /** Replace an existing output file instead of skipping it (defaults to false) */
   overwrite?: boolean;
   /**
@@ -223,9 +207,10 @@ export async function generatePdfsForStopPlaces(
   const skipped: PdfGenerationItemResult[] = [];
   const failed: PdfGenerationFailure[] = [];
 
-  const posterConfig = options.posterConfig
-    ? validatePosterConfig(options.posterConfig)
-    : await loadFramPosterConfig(options.assetsDirectory);
+  const posterConfig = await resolvePosterConfig(
+    options.posterConfig,
+    options.assetsDirectory,
+  );
 
   const ids: string[] = requests.map((request) =>
     typeof request === "string" ? request : request.id,
@@ -387,7 +372,7 @@ function isValidAbsoluteHttpUrl(value: unknown): value is string {
  * @param id - The ID to display
  * @param outputPath - Output file path
  * @param stopPlaceInfo - Stop place information from Entur API
- * @param options - PDF generation options including style configuration
+ * @param options - PDF generation options including poster configuration
  */
 async function generateSinglePdf(
   id: string,
@@ -448,32 +433,14 @@ async function generateSinglePdf(
 
     // The public entry point always resolves this once for the whole batch.
     const config =
-      posterConfig ?? (await loadFramPosterConfig(options?.assetsDirectory));
+      posterConfig ??
+      (await resolvePosterConfig(undefined, options?.assetsDirectory));
 
-    // Legacy style options remain higher-priority overrides.
-    const styleConfig = options?.style || {};
-    const headerFooterColor =
-      styleConfig.headerFooterColor || config.colors.headerFooter;
+    const headerFooterColor = config.colors.headerFooter;
     const headerTextColor = config.colors.headerText;
     const bodyTextColor = config.colors.bodyText;
     const borderColor = config.colors.border;
-    const logo = config.logo
-      ? {
-          ...config.logo,
-          path: styleConfig.logoPath || config.logo.path,
-          maxWidth: styleConfig.logoWidth || config.logo.maxWidth,
-          maxHeight: styleConfig.logoWidth
-            ? Math.round(styleConfig.logoWidth * 0.27)
-            : config.logo.maxHeight,
-          preserveAspectRatio: styleConfig.logoWidth
-            ? false
-            : config.logo.preserveAspectRatio,
-          fallbackText:
-            styleConfig.fallbackLogoText || config.logo.fallbackText,
-          fallbackSubtext:
-            styleConfig.fallbackLogoSubtext || config.logo.fallbackSubtext,
-        }
-      : null;
+    const logo = config.logo;
 
     // Add rounded border box around entire content
     const borderRadius = 15;

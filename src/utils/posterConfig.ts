@@ -76,6 +76,14 @@ export interface PosterConfig {
   qrUrlTemplate: string;
 }
 
+export const builtInPosterConfigNames = ["fram"] as const;
+export type BuiltInPosterConfigName = (typeof builtInPosterConfigNames)[number];
+export type PosterConfigSource = PosterConfig | BuiltInPosterConfigName;
+
+const builtInPosterConfigFiles: Record<BuiltInPosterConfigName, string> = {
+  fram: "fram-poster.json",
+};
+
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -291,13 +299,53 @@ export async function loadPosterConfig(
   }
 }
 
-/** Loads the FRAM preset shipped with the package. */
-export function loadFramPosterConfig(
+/** Loads a named poster pack shipped with the package. */
+export function loadBuiltInPosterConfig(
+  name: BuiltInPosterConfigName,
   assetsDirectory?: string,
 ): Promise<PosterConfig> {
+  const fileName = builtInPosterConfigFiles[name];
+  if (!fileName) {
+    throw new Error(
+      `Unknown built-in poster config "${String(name)}". Available packs: ${builtInPosterConfigNames.join(
+        ", ",
+      )}`,
+    );
+  }
   return loadPosterConfig(
-    resolveAssetPath(assetsDirectory, "config", "fram-poster.json"),
+    resolveAssetPath(assetsDirectory, "config", fileName),
   );
+}
+
+/**
+ * Resolves a CLI-style config reference: a built-in pack name such as `fram`,
+ * or a path to a JSON configuration file.
+ */
+export function loadPosterConfigSource(
+  source: string,
+  assetsDirectory?: string,
+): Promise<PosterConfig> {
+  if ((builtInPosterConfigNames as readonly string[]).includes(source)) {
+    return loadBuiltInPosterConfig(
+      source as BuiltInPosterConfigName,
+      assetsDirectory,
+    );
+  }
+  return loadPosterConfig(source);
+}
+
+/** Resolves the API's object-or-pack configuration value. */
+export async function resolvePosterConfig(
+  source: PosterConfigSource | undefined,
+  assetsDirectory?: string,
+): Promise<PosterConfig> {
+  if (source === undefined) {
+    return loadBuiltInPosterConfig("fram", assetsDirectory);
+  }
+  if (typeof source === "string") {
+    return loadBuiltInPosterConfig(source, assetsDirectory);
+  }
+  return validatePosterConfig(source);
 }
 
 export function renderPosterTemplate(
