@@ -815,14 +815,14 @@ async function generateSinglePdf(
         .fontSize(14)
         .font(poppinsRegular)
         .text(
-          "• I appane / in the apps:",
+          "• I appen / in the app:",
           rightColumnX,
           rightColumnStartY + 100,
         );
 
       doc
         .font(poppinsBold)
-        .text("FRAM / Entur", rightColumnX + 10, rightColumnStartY + 120);
+        .text("Entur", rightColumnX + 10, rightColumnStartY + 120);
 
       doc
         .font(poppinsRegular)
