@@ -211,9 +211,13 @@ nsr-barcode file ids.txt -o ./output [-f A4|A3|Letter] [--orientation landscape|
   [--config fram|./my-authority-poster.json]
 
 nsr-barcode id NSR:StopPlace:39598 -o ./output --config fram
+nsr-barcode --list-configs                         # list supported built-in configs
 nsr-barcode validate NSR:StopPlace:39598          # check ID format only
 nsr-barcode parse ids.txt                         # list unique IDs, no PDFs
 ```
+
+`configs` (also available as `config` and `list-configs`) is an equivalent
+command-style way to list the supported built-in configs.
 
 Both `file` and `id` accept `-c, --config <pack-or-file>`. They print one line per
 `onProgress` event as it happens - Entur lookups first (`[fetching n/total]
