@@ -7,12 +7,7 @@
 
 import { Command } from "commander";
 import { version } from "../package.json";
-import {
-  type IdParseError,
-  NsrBarcodeApi,
-  type PdfProgressEvent,
-  type PdfStyleConfig,
-} from "./api";
+import { type IdParseError, NsrBarcodeApi, type PdfProgressEvent } from "./api";
 
 const program = new Command();
 
@@ -75,16 +70,9 @@ program
     "landscape",
   )
   .option(
-    "--header-color <color>",
-    "Header and footer background color (hex format, e.g., #1A4D75)",
+    "-c, --config <pack-or-file>",
+    "Built-in poster pack (for example: fram) or configuration JSON file",
   )
-  .option(
-    "--logo-path <path>",
-    "Path to logo image file for lower right corner",
-  )
-  .option("--logo-width <width>", "Logo width in pixels", parseInt)
-  .option("--fallback-text <text>", "Fallback text if logo cannot be loaded")
-  .option("--fallback-subtext <text>", "Additional fallback text (subtitle)")
   .option(
     "--overwrite",
     "Replace existing output PDFs instead of skipping them",
@@ -97,11 +85,7 @@ program
         output: string;
         format?: string;
         orientation?: string;
-        headerColor?: string;
-        logoPath?: string;
-        logoWidth?: number;
-        fallbackText?: string;
-        fallbackSubtext?: string;
+        config?: string;
         overwrite?: boolean;
       },
     ) => {
@@ -135,23 +119,8 @@ program
         if (orientation && orientation !== "landscape") {
           console.log(`PDF orientation: ${orientation}`);
         }
-
-        // Build style configuration
-        const styleConfig: PdfStyleConfig = {};
-        if (options.headerColor) {
-          styleConfig.headerFooterColor = options.headerColor;
-        }
-        if (options.logoPath) {
-          styleConfig.logoPath = options.logoPath;
-        }
-        if (options.logoWidth) {
-          styleConfig.logoWidth = options.logoWidth;
-        }
-        if (options.fallbackText) {
-          styleConfig.fallbackLogoText = options.fallbackText;
-        }
-        if (options.fallbackSubtext) {
-          styleConfig.fallbackLogoSubtext = options.fallbackSubtext;
+        if (options.config) {
+          console.log(`Poster config: ${options.config}`);
         }
 
         const processOptions: Parameters<typeof NsrBarcodeApi.processFile>[0] =
@@ -166,8 +135,9 @@ program
         if (orientation && orientation !== "landscape") {
           processOptions.orientation = orientation;
         }
-        if (Object.keys(styleConfig).length > 0) {
-          processOptions.style = styleConfig;
+        if (options.config) {
+          processOptions.posterConfig =
+            await NsrBarcodeApi.loadPosterConfigSource(options.config);
         }
         if (options.overwrite) {
           processOptions.overwrite = true;
@@ -204,16 +174,9 @@ program
     "landscape",
   )
   .option(
-    "--header-color <color>",
-    "Header and footer background color (hex format, e.g., #1A4D75)",
+    "-c, --config <pack-or-file>",
+    "Built-in poster pack (for example: fram) or configuration JSON file",
   )
-  .option(
-    "--logo-path <path>",
-    "Path to logo image file for lower right corner",
-  )
-  .option("--logo-width <width>", "Logo width in pixels", parseInt)
-  .option("--fallback-text <text>", "Fallback text if logo cannot be loaded")
-  .option("--fallback-subtext <text>", "Additional fallback text (subtitle)")
   .option(
     "--overwrite",
     "Replace an existing output PDF instead of skipping it",
@@ -226,11 +189,7 @@ program
         output: string;
         format?: string;
         orientation?: string;
-        headerColor?: string;
-        logoPath?: string;
-        logoWidth?: number;
-        fallbackText?: string;
-        fallbackSubtext?: string;
+        config?: string;
         overwrite?: boolean;
       },
     ) => {
@@ -264,23 +223,8 @@ program
         if (orientation && orientation !== "landscape") {
           console.log(`PDF orientation: ${orientation}`);
         }
-
-        // Build style configuration
-        const styleConfig: PdfStyleConfig = {};
-        if (options.headerColor) {
-          styleConfig.headerFooterColor = options.headerColor;
-        }
-        if (options.logoPath) {
-          styleConfig.logoPath = options.logoPath;
-        }
-        if (options.logoWidth) {
-          styleConfig.logoWidth = options.logoWidth;
-        }
-        if (options.fallbackText) {
-          styleConfig.fallbackLogoText = options.fallbackText;
-        }
-        if (options.fallbackSubtext) {
-          styleConfig.fallbackLogoSubtext = options.fallbackSubtext;
+        if (options.config) {
+          console.log(`Poster config: ${options.config}`);
         }
 
         const generateOptions: Parameters<
@@ -296,8 +240,9 @@ program
         if (orientation && orientation !== "landscape") {
           generateOptions.orientation = orientation;
         }
-        if (Object.keys(styleConfig).length > 0) {
-          generateOptions.style = styleConfig;
+        if (options.config) {
+          generateOptions.posterConfig =
+            await NsrBarcodeApi.loadPosterConfigSource(options.config);
         }
         if (options.overwrite) {
           generateOptions.overwrite = true;

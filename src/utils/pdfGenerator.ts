@@ -10,19 +10,12 @@ import {
   type StopPlaceInfo,
 } from "./enturApi";
 import { fontLoader } from "./fontLoader";
-
-export interface PdfStyleConfig {
-  /** Color for header and footer background (hex color) */
-  headerFooterColor?: string;
-  /** Path to logo image file for lower right corner */
-  logoPath?: string;
-  /** Logo width in pixels (height will be calculated to maintain aspect ratio) */
-  logoWidth?: number;
-  /** Fallback text to display if logo cannot be loaded */
-  fallbackLogoText?: string;
-  /** Additional fallback text (subtitle) */
-  fallbackLogoSubtext?: string;
-}
+import {
+  type PosterConfig,
+  type PosterConfigSource,
+  renderPosterTemplate,
+  resolvePosterConfig,
+} from "./posterConfig";
 
 /**
  * Context passed to a `generateQrUrl` callback once Entur metadata has been
@@ -132,8 +125,11 @@ export interface PdfGenerationOptions {
    * package's built-in departures URL for backward compatibility.
    */
   generateQrUrl?: (stopPlace: StopPlaceQrContext) => string;
-  /** Style configuration for PDF appearance */
-  style?: PdfStyleConfig;
+  /**
+   * Complete poster definition or the name of a built-in poster pack. When
+   * omitted, the bundled `fram` pack is used.
+   */
+  posterConfig?: PosterConfigSource;
   /** Replace an existing output file instead of skipping it (defaults to false) */
   overwrite?: boolean;
   /**
@@ -211,6 +207,11 @@ export async function generatePdfsForStopPlaces(
   const skipped: PdfGenerationItemResult[] = [];
   const failed: PdfGenerationFailure[] = [];
 
+  const posterConfig = await resolvePosterConfig(
+    options.posterConfig,
+    options.assetsDirectory,
+  );
+
   const ids: string[] = requests.map((request) =>
     typeof request === "string" ? request : request.id,
   );
@@ -237,23 +238,23 @@ export async function generatePdfsForStopPlaces(
         enturApi.getMultipleStopPlaces(idsToFetch, {
           ...(onProgress
             ? {
-              onProgress: (event: StopPlaceFetchProgressEvent) =>
-                onProgress({
-                  type: "data-fetching",
-                  current: event.current,
-                  total: event.total,
-                  nsrId: event.nsrId,
-                  status: event.status,
-                  ...(event.error ? { error: event.error } : {}),
-                }),
-              onBatchComplete: (event: StopPlaceBatchProgressEvent) =>
-                onProgress({
-                  type: "data-fetching-batch",
-                  batchNumber: event.batchNumber,
-                  totalBatches: event.totalBatches,
-                  delayMs: event.delayMs,
-                }),
-            }
+                onProgress: (event: StopPlaceFetchProgressEvent) =>
+                  onProgress({
+                    type: "data-fetching",
+                    current: event.current,
+                    total: event.total,
+                    nsrId: event.nsrId,
+                    status: event.status,
+                    ...(event.error ? { error: event.error } : {}),
+                  }),
+                onBatchComplete: (event: StopPlaceBatchProgressEvent) =>
+                  onProgress({
+                    type: "data-fetching-batch",
+                    batchNumber: event.batchNumber,
+                    totalBatches: event.totalBatches,
+                    delayMs: event.delayMs,
+                  }),
+              }
             : {}),
         }));
     fetchedInfos = await fetchStopPlaces(idsNeedingFetch);
@@ -309,7 +310,13 @@ export async function generatePdfsForStopPlaces(
       }
 
       // Generate PDF with stop place information
-      await generateSinglePdf(id, outputPath, stopPlaceInfo, options);
+      await generateSinglePdf(
+        id,
+        outputPath,
+        stopPlaceInfo,
+        options,
+        posterConfig,
+      );
       generated.push({ nsrId: id, outputPath });
       onProgress?.({
         type: "generation",
@@ -365,13 +372,14 @@ function isValidAbsoluteHttpUrl(value: unknown): value is string {
  * @param id - The ID to display
  * @param outputPath - Output file path
  * @param stopPlaceInfo - Stop place information from Entur API
- * @param options - PDF generation options including style configuration
+ * @param options - PDF generation options including poster configuration
  */
 async function generateSinglePdf(
   id: string,
   outputPath: string,
   stopPlaceInfo: StopPlaceInfo,
   options?: PdfGenerationOptions,
+  posterConfig?: PosterConfig,
 ): Promise<void> {
   let stream: ReturnType<typeof createWriteStream>;
 
@@ -423,24 +431,16 @@ async function generateSinglePdf(
     const pageWidth = doc.page.width;
     const pageHeight = doc.page.height;
 
-    // Get style configuration with defaults
-    const styleConfig = options?.style || {};
-    const headerFooterColor = styleConfig.headerFooterColor || "#1A4D75"; // Default FRAM blue
-    const logoPath =
-      styleConfig.logoPath ||
-      resolveAssetPath(
-        options?.assetsDirectory,
-        "images",
-        "fram_mor_fylkeskommune_dark.png",
-      );
-    const logoWidth = styleConfig.logoWidth || 105;
-    const fallbackLogoText = styleConfig.fallbackLogoText || "FRAM";
-    const fallbackLogoSubtext =
-      styleConfig.fallbackLogoSubtext || "Møre og Romsdal fylkeskommune";
+    // The public entry point always resolves this once for the whole batch.
+    const config =
+      posterConfig ??
+      (await resolvePosterConfig(undefined, options?.assetsDirectory));
 
-    // Define colors
-    const white = "#FFFFFF";
-    const darkGray = "#333333";
+    const headerFooterColor = config.colors.headerFooter;
+    const headerTextColor = config.colors.headerText;
+    const bodyTextColor = config.colors.bodyText;
+    const borderColor = config.colors.border;
+    const logo = config.logo;
 
     // Add rounded border box around entire content
     const borderRadius = 15;
@@ -457,7 +457,7 @@ async function generateSinglePdf(
         boxHeight,
         borderRadius,
       )
-      .stroke("#000000");
+      .stroke(borderColor);
 
     // Header section (blue background) - clipped to border box
     const headerHeight = 80;
@@ -510,9 +510,9 @@ async function generateSinglePdf(
       doc
         .lineWidth(3)
         .circle(iconX, iconY, iconSize / 2)
-        .stroke(white)
+        .stroke(headerTextColor)
         .circle(iconX, iconY, iconSize / 2)
-        .stroke(white);
+        .stroke(headerTextColor);
 
       // Add the transport mode icon
       const iconImageSize = iconSize * 0.6; // Make icon slightly smaller than circle
@@ -529,11 +529,11 @@ async function generateSinglePdf(
       doc
         .lineWidth(3)
         .circle(iconX, iconY, iconSize / 2)
-        .stroke(white);
+        .stroke(headerTextColor);
 
       // Add fallback icon text
       doc
-        .fillColor(white)
+        .fillColor(headerTextColor)
         .fontSize(20)
         .font(poppinsBold)
         .text("x", iconX - 10, iconY - 10);
@@ -541,14 +541,20 @@ async function generateSinglePdf(
 
     // Add stop name in header
     const stopName = stopPlaceInfo.name || id;
+    const posterContext = { id, name: stopName };
     doc
-      .fillColor(white)
+      .fillColor(headerTextColor)
       .fontSize(36)
       .font(poppinsBold)
-      .text(stopName, 130, 35, {
-        width: pageWidth - 200,
-        align: "left",
-      });
+      .text(
+        renderPosterTemplate(config.layout.header.title, posterContext),
+        130,
+        35,
+        {
+          width: pageWidth - 200,
+          align: "left",
+        },
+      );
 
     // Main content area - centered vertically (adjust for orientation)
     const footerHeight = 80;
@@ -573,15 +579,22 @@ async function generateSinglePdf(
       }
       qrUrl = candidate;
     } else {
-      qrUrl = `https://reise.frammr.no/departures/${encodeURIComponent(id)}?qr`;
+      qrUrl = renderPosterTemplate(config.qrUrlTemplate, posterContext);
+      if (!isValidAbsoluteHttpUrl(qrUrl)) {
+        throw new Error(
+          `qrUrlTemplate produced an invalid URL for "${id}": ${JSON.stringify(
+            qrUrl,
+          )}. Expected a non-empty absolute http(s) URL.`,
+        );
+      }
     }
 
     const qrCodeDataURL = await QRCode.toDataURL(qrUrl, {
       width: 200,
       margin: 1,
       color: {
-        dark: "#000000",
-        light: "#FFFFFF",
+        dark: config.colors.qrDark,
+        light: config.colors.qrLight,
       },
     });
 
@@ -591,257 +604,99 @@ async function generateSinglePdf(
       qrCodeBuffer = Buffer.from(base64Data, "base64");
     }
 
+    const renderMainSections = (x: number, startY: number): number => {
+      let y = startY;
+      config.layout.main.sections.forEach((section) => {
+        y += section.marginTop ?? 0;
+        doc.fillColor(bodyTextColor).fontSize(24).font(poppinsBold);
+        for (const line of section.headingLines) {
+          doc.text(renderPosterTemplate(line, posterContext), x, y);
+          y += 25;
+        }
+        y += section.bodyMarginTop ?? 15;
+        doc.fillColor(bodyTextColor).fontSize(14).font(poppinsRegular);
+        for (const line of section.bodyLines) {
+          doc.text(renderPosterTemplate(line, posterContext), x, y);
+          y += 20;
+        }
+      });
+      return y;
+    };
+
+    const renderAsideGroups = (
+      x: number,
+      startY: number,
+      usePortraitLines: boolean,
+    ): number => {
+      let y = startY;
+      for (const group of config.layout.aside.groups) {
+        y += group.marginTop ?? 0;
+        doc
+          .fillColor(bodyTextColor)
+          .fontSize(14)
+          .font(group.weight === "bold" ? poppinsBold : poppinsRegular);
+        const lines =
+          usePortraitLines && group.portraitLines
+            ? group.portraitLines
+            : group.lines;
+        for (const line of lines) {
+          doc.text(
+            renderPosterTemplate(line, posterContext),
+            x + (group.indent ?? 0),
+            y,
+          );
+          y += 20;
+        }
+      }
+      return y;
+    };
+
+    const qrSize = 120;
+    const qrX = iconX - iconSize / 2;
+
     if (orientation === "portrait") {
-      // Portrait layout: QR code in left column, right column text from landscape
-      const qrSize = 120;
-      const topMargin = headerHeight + 20; // Right under header with small margin
-      const qrX = iconX - iconSize / 2; // Same X position as landscape QR code
-      const qrY = topMargin; // Move to top under header
-
-      // Add QR code on the left
+      const topMargin = headerHeight + 20;
       if (qrCodeBuffer) {
-        doc.image(qrCodeBuffer, qrX, qrY, { width: qrSize, height: qrSize });
+        doc.image(qrCodeBuffer, qrX, topMargin, {
+          width: qrSize,
+          height: qrSize,
+        });
       }
 
-      // Right column text - exactly the same as landscape right column
-      const rightColumnX = pageWidth - 350; // Increased width by 30 points
-      const rightColumnStartY = topMargin; // Same Y position as QR code, under header
-
-      // Norwegian section (from landscape middle column)
-      doc
-        .fillColor(darkGray)
-        .fontSize(24)
-        .font(poppinsBold)
-        .text("Når kjem bussen?", rightColumnX, rightColumnStartY);
-
-      doc
-        .fillColor(darkGray)
-        .fontSize(14)
-        .font(poppinsRegular)
-        .text(
-          "Opne mobilkameraet ditt og hald",
-          rightColumnX,
-          rightColumnStartY + 40,
-        )
-        .text(
-          "kameralinsa over QR-koden. Lenka",
-          rightColumnX,
-          rightColumnStartY + 60,
-        )
-        .text(
-          "fører deg til reiseplanleggaren, og viser",
-          rightColumnX,
-          rightColumnStartY + 80,
-        )
-        .text(
-          "busslinjer og avgangar frå haldeplassen",
-          rightColumnX,
-          rightColumnStartY + 100,
-        )
-        .text("du står på.", rightColumnX, rightColumnStartY + 120);
-
-      // English section (moved to be right after Norwegian section)
-      const englishStartY = rightColumnStartY + 160;
-      doc
-        .fillColor(darkGray)
-        .fontSize(24)
-        .font(poppinsBold)
-        .text("When will the bus", rightColumnX, englishStartY)
-        .text("arrive?", rightColumnX, englishStartY + 25);
-
-      doc
-        .fillColor(darkGray)
-        .fontSize(14)
-        .font(poppinsRegular)
-        .text(
-          "Open your mobile camera and hold",
-          rightColumnX,
-          englishStartY + 60,
-        )
-        .text(
-          "camera lens over the QR code. The link",
-          rightColumnX,
-          englishStartY + 80,
-        )
-        .text(
-          "takes you to the travel planner, and",
-          rightColumnX,
-          englishStartY + 100,
-        )
-        .text(
-          "shows bus lines and departures from the",
-          rightColumnX,
-          englishStartY + 120,
-        )
-        .text("stop you are at.", rightColumnX, englishStartY + 140);
-
-      // Info section (moved to be at the end)
-      const infoStartY = englishStartY + 180;
-      doc
-        .fillColor(darkGray)
-        .fontSize(14)
-        .font(poppinsBold)
-        .text("Informasjon om bussavgangar", rightColumnX, infoStartY)
-        .text("finn du också:", rightColumnX, infoStartY + 20);
-
-      doc
-        .fillColor(darkGray)
-        .fontSize(14)
-        .font(poppinsRegular)
-        .text("Information about bus departures", rightColumnX, infoStartY + 40)
-        .text("can also be found:", rightColumnX, infoStartY + 60);
-
-      doc
-        .fillColor(darkGray)
-        .fontSize(14)
-        .font(poppinsRegular)
-        .text("• I appen / in the app:", rightColumnX, infoStartY + 100);
-
-      doc
-        .font(poppinsBold)
-        .text("Entur", rightColumnX + 10, infoStartY + 120);
-
-      doc
-        .font(poppinsRegular)
-        .text(
-          "• På nettsidene / on the websites:",
-          rightColumnX,
-          infoStartY + 155,
-        );
-
-      doc
-        .font(poppinsBold)
-        .text("frammr.no / entur.no", rightColumnX + 10, infoStartY + 175);
+      const rightColumnX = pageWidth - 350;
+      const mainEndY = renderMainSections(rightColumnX, topMargin);
+      renderAsideGroups(
+        rightColumnX,
+        mainEndY + config.layout.aside.portraitMarginTop,
+        true,
+      );
     } else {
-      const qrSize = 120;
-      const qrX = iconX - iconSize / 2; // Align QR code left edge with left edge of circular icon
-      const qrY = contentY;
-
-      // Add QR code
       if (qrCodeBuffer) {
-        doc.image(qrCodeBuffer, qrX, qrY, { width: qrSize, height: qrSize });
+        doc.image(qrCodeBuffer, qrX, contentY, {
+          width: qrSize,
+          height: qrSize,
+        });
       }
 
-      // Text content (center and right)
-      const textStartX = qrX + qrSize + 20; // Text starts after the QR code with some padding
-      const rightColumnX = pageWidth - 320; // Right column remains in the same position
+      const textStartX = qrX + qrSize + 20;
+      const rightColumnX = pageWidth - 320;
+      renderMainSections(textStartX, contentY);
 
-      // Norwegian section
-      doc
-        .fillColor(darkGray)
-        .fontSize(24)
-        .font(poppinsBold)
-        .text("Når kjem bussen?", textStartX, contentY);
-
-      doc
-        .fillColor(darkGray)
-        .fontSize(14)
-        .font(poppinsRegular)
-        .text("Opne mobilkameraet ditt og hald", textStartX, contentY + 40)
-        .text("kameralinsa over QR-koden. Lenka", textStartX, contentY + 60)
-        .text(
-          "fører deg til reiseplanleggaren, og viser",
-          textStartX,
-          contentY + 80,
-        )
-        .text(
-          "busslinjer og avgangar frå haldeplassen",
-          textStartX,
-          contentY + 100,
-        )
-        .text("du står på.", textStartX, contentY + 120);
-
-      // English section
-      doc
-        .fillColor(darkGray)
-        .fontSize(24)
-        .font(poppinsBold)
-        .text("When will the bus", textStartX, contentY + 160)
-        .text("arrive?", textStartX, contentY + 185);
-
-      doc
-        .fillColor(darkGray)
-        .fontSize(14)
-        .font(poppinsRegular)
-        .text("Open your mobile camera and hold", textStartX, contentY + 220)
-        .text(
-          "camera lens over the QR code. The link",
-          textStartX,
-          contentY + 240,
-        )
-        .text(
-          "takes you to the travel planner, and",
-          textStartX,
-          contentY + 260,
-        )
-        .text(
-          "shows bus lines and departures from the",
-          textStartX,
-          contentY + 280,
-        )
-        .text("stop you are at.", textStartX, contentY + 300);
-
-      // Add vertical line separating center and right columns
       const separatorX = rightColumnX - 22;
       doc
         .lineWidth(0.25)
         .moveTo(separatorX, contentY)
         .lineTo(separatorX, contentY + 320)
-        .stroke("#000000");
+        .stroke(borderColor);
 
-      // Right column - Additional info (aligned with "Opne mobilkameraet ditt ...")
-      const rightColumnStartY = contentY + 40;
-
-      doc
-        .fillColor(darkGray)
-        .fontSize(14)
-        .font(poppinsBold)
-        .text("Informasjon om bussavgangar", rightColumnX, rightColumnStartY)
-        .text("finn du også:", rightColumnX, rightColumnStartY + 20);
-
-      doc
-        .fillColor(darkGray)
-        .fontSize(14)
-        .font(poppinsRegular)
-        .text(
-          "Information about bus departures",
-          rightColumnX,
-          rightColumnStartY + 40,
-        )
-        .text("can also be found:", rightColumnX, rightColumnStartY + 60);
-
-      doc
-        .fillColor(darkGray)
-        .fontSize(14)
-        .font(poppinsRegular)
-        .text(
-          "• I appen / in the app:",
-          rightColumnX,
-          rightColumnStartY + 100,
-        );
-
-      doc
-        .font(poppinsBold)
-        .text("Entur", rightColumnX + 10, rightColumnStartY + 120);
-
-      doc
-        .font(poppinsRegular)
-        .text(
-          "• På nettsidene / on the websites:",
-          rightColumnX,
-          rightColumnStartY + 155,
-        );
-
-      doc
-        .font(poppinsBold)
-        .text(
-          "frammr.no / entur.no",
-          rightColumnX + 10,
-          rightColumnStartY + 175,
-        );
+      renderAsideGroups(
+        rightColumnX,
+        contentY + config.layout.aside.landscapeTop,
+        false,
+      );
     }
 
-    // Footer with FRAM logo area - clipped to border box
+    // Footer and optional organization logo area - clipped to border box
     const footerY = pageHeight - footerHeight;
     doc
       .save()
@@ -857,34 +712,39 @@ async function generateSinglePdf(
       .fill(headerFooterColor)
       .restore();
 
-    // Add logo in lower right corner
-    try {
-      const logoBuffer = await fs.readFile(logoPath);
+    if (logo) {
+      try {
+        const logoBuffer = await fs.readFile(logo.path);
+        const logoX = pageWidth - borderMargin - logo.maxWidth - 20;
+        const logoY = footerY + footerHeight - logo.maxHeight - 35;
 
-      // Position logo in lower right corner of footer with some margin
-      const logoHeight = Math.round(logoWidth * 0.27); // Maintain aspect ratio (approximately 3.75:1)
-      const logoX = pageWidth - borderMargin - logoWidth - 20; // 20px margin from right edge
-      const logoY = footerY + footerHeight - logoHeight - 35; // 35px margin from bottom
-
-      doc.image(logoBuffer, logoX, logoY, {
-        width: logoWidth,
-        height: logoHeight,
-      });
-    } catch (error) {
-      console.warn("Could not load logo image:", error);
-      // Fallback to text logo if image fails to load
-      doc
-        .fillColor(white)
-        .fontSize(24)
-        .font(poppinsBold)
-        .text(fallbackLogoText, pageWidth - 150, footerY + 25);
-
-      if (fallbackLogoSubtext) {
+        if (logo.preserveAspectRatio === false) {
+          doc.image(logoBuffer, logoX, logoY, {
+            width: logo.maxWidth,
+            height: logo.maxHeight,
+          });
+        } else {
+          doc.image(logoBuffer, logoX, logoY, {
+            fit: [logo.maxWidth, logo.maxHeight],
+            align: "right",
+            valign: "center",
+          });
+        }
+      } catch (error) {
+        console.warn("Could not load logo image:", error);
         doc
-          .fillColor(white)
-          .fontSize(10)
-          .font(poppinsRegular)
-          .text(fallbackLogoSubtext, pageWidth - 220, footerY + 55);
+          .fillColor(headerTextColor)
+          .fontSize(24)
+          .font(poppinsBold)
+          .text(logo.fallbackText, pageWidth - 150, footerY + 25);
+
+        if (logo.fallbackSubtext) {
+          doc
+            .fillColor(headerTextColor)
+            .fontSize(10)
+            .font(poppinsRegular)
+            .text(logo.fallbackSubtext, pageWidth - 220, footerY + 55);
+        }
       }
     }
 
@@ -892,7 +752,8 @@ async function generateSinglePdf(
     doc.end();
   } catch (error) {
     throw new Error(
-      `PDF generation failed: ${error instanceof Error ? error.message : "Unknown error"
+      `PDF generation failed: ${
+        error instanceof Error ? error.message : "Unknown error"
       }`,
     );
   }

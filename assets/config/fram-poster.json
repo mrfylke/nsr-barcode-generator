@@ -1,0 +1,88 @@
+{
+  "$schema": "./poster-config.schema.json",
+  "version": 1,
+  "colors": {
+    "headerFooter": "#1A4D75",
+    "headerText": "#FFFFFF",
+    "bodyText": "#333333",
+    "border": "#000000",
+    "qrDark": "#000000",
+    "qrLight": "#FFFFFF"
+  },
+  "logo": {
+    "path": "../images/fram_mor_fylkeskommune_dark.png",
+    "maxWidth": 105,
+    "maxHeight": 28,
+    "preserveAspectRatio": false,
+    "fallbackText": "FRAM",
+    "fallbackSubtext": "Møre og Romsdal fylkeskommune"
+  },
+  "layout": {
+    "header": {
+      "title": "{{stopName}}"
+    },
+    "main": {
+      "sections": [
+        {
+          "headingLines": ["Når kjem bussen?"],
+          "bodyLines": [
+            "Opne mobilkameraet ditt og hald",
+            "kameralinsa over QR-koden. Lenka",
+            "fører deg til reiseplanleggaren, og viser",
+            "busslinjer og avgangar frå haldeplassen",
+            "du står på."
+          ],
+          "bodyMarginTop": 15
+        },
+        {
+          "headingLines": ["When will the bus", "arrive?"],
+          "bodyLines": [
+            "Open your mobile camera and hold",
+            "camera lens over the QR code. The link",
+            "takes you to the travel planner, and",
+            "shows bus lines and departures from the",
+            "stop you are at."
+          ],
+          "marginTop": 20,
+          "bodyMarginTop": 10
+        }
+      ]
+    },
+    "aside": {
+      "landscapeTop": 40,
+      "portraitMarginTop": 20,
+      "groups": [
+        {
+          "weight": "bold",
+          "lines": ["Informasjon om bussavgangar", "finn du også:"],
+          "portraitLines": ["Informasjon om bussavgangar", "finn du också:"]
+        },
+        {
+          "weight": "regular",
+          "lines": ["Information about bus departures", "can also be found:"]
+        },
+        {
+          "weight": "regular",
+          "marginTop": 20,
+          "lines": ["• I appen / in the app:"]
+        },
+        {
+          "weight": "bold",
+          "indent": 10,
+          "lines": ["Entur"]
+        },
+        {
+          "weight": "regular",
+          "marginTop": 15,
+          "lines": ["• På nettsidene / on the websites:"]
+        },
+        {
+          "weight": "bold",
+          "indent": 10,
+          "lines": ["frammr.no / entur.no"]
+        }
+      ]
+    }
+  },
+  "qrUrlTemplate": "https://reise.frammr.no/departures/{{encodedNsrId}}?qr"
+}
