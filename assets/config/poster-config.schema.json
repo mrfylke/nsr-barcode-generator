@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mrfylke/nsr-barcode-generator/blob/main/assets/config/poster-config.schema.json",
+  "title": "NSR Barcode Generator poster configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "colors", "logo", "layout", "qrUrlTemplate"],
+  "properties": {
+    "$schema": { "type": "string", "minLength": 1 },
+    "version": { "const": 1 },
+    "colors": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headerFooter",
+        "headerText",
+        "bodyText",
+        "border",
+        "qrDark",
+        "qrLight"
+      ],
+      "properties": {
+        "headerFooter": { "$ref": "#/$defs/color" },
+        "headerText": { "$ref": "#/$defs/color" },
+        "bodyText": { "$ref": "#/$defs/color" },
+        "border": { "$ref": "#/$defs/color" },
+        "qrDark": { "$ref": "#/$defs/color" },
+        "qrLight": { "$ref": "#/$defs/color" }
+      }
+    },
+    "logo": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "maxWidth",
+            "maxHeight",
+            "fallbackText",
+            "fallbackSubtext"
+          ],
+          "properties": {
+            "path": { "type": "string", "minLength": 1 },
+            "maxWidth": { "type": "number", "exclusiveMinimum": 0 },
+            "maxHeight": { "type": "number", "exclusiveMinimum": 0 },
+            "preserveAspectRatio": { "type": "boolean", "default": true },
+            "fallbackText": { "type": "string" },
+            "fallbackSubtext": { "type": "string" }
+          }
+        }
+      ]
+    },
+    "layout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["header", "main", "aside"],
+      "properties": {
+        "header": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["title"],
+          "properties": { "title": { "type": "string", "minLength": 1 } }
+        },
+        "main": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sections"],
+          "properties": {
+            "sections": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/section" }
+            }
+          }
+        },
+        "aside": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["groups", "landscapeTop", "portraitMarginTop"],
+          "properties": {
+            "groups": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/textGroup" }
+            },
+            "landscapeTop": { "type": "number", "minimum": 0 },
+            "portraitMarginTop": { "type": "number", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "qrUrlTemplate": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Absolute HTTP(S) URL supporting {{nsrId}}, {{encodedNsrId}}, {{stopName}}, and {{encodedStopName}}."
+    }
+  },
+  "$defs": {
+    "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+    "lines": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "section": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["headingLines", "bodyLines"],
+      "properties": {
+        "headingLines": { "$ref": "#/$defs/lines" },
+        "bodyLines": { "$ref": "#/$defs/lines" },
+        "marginTop": { "type": "number", "minimum": 0 },
+        "bodyMarginTop": { "type": "number", "minimum": 0 }
+      }
+    },
+    "textGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["weight", "lines"],
+      "properties": {
+        "weight": { "enum": ["regular", "bold"] },
+        "lines": { "$ref": "#/$defs/lines" },
+        "portraitLines": { "$ref": "#/$defs/lines" },
+        "marginTop": { "type": "number", "minimum": 0 },
+        "indent": { "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}

@@ -86,6 +86,10 @@ program
   .option("--fallback-text <text>", "Fallback text if logo cannot be loaded")
   .option("--fallback-subtext <text>", "Additional fallback text (subtitle)")
   .option(
+    "-c, --config <file>",
+    "Poster configuration JSON file (see bundled poster-config.schema.json)",
+  )
+  .option(
     "--overwrite",
     "Replace existing output PDFs instead of skipping them",
   )
@@ -102,6 +106,7 @@ program
         logoWidth?: number;
         fallbackText?: string;
         fallbackSubtext?: string;
+        config?: string;
         overwrite?: boolean;
       },
     ) => {
@@ -134,6 +139,9 @@ program
         }
         if (orientation && orientation !== "landscape") {
           console.log(`PDF orientation: ${orientation}`);
+        }
+        if (options.config) {
+          console.log(`Poster config: ${options.config}`);
         }
 
         // Build style configuration
@@ -168,6 +176,11 @@ program
         }
         if (Object.keys(styleConfig).length > 0) {
           processOptions.style = styleConfig;
+        }
+        if (options.config) {
+          processOptions.posterConfig = await NsrBarcodeApi.loadPosterConfig(
+            options.config,
+          );
         }
         if (options.overwrite) {
           processOptions.overwrite = true;
@@ -215,6 +228,10 @@ program
   .option("--fallback-text <text>", "Fallback text if logo cannot be loaded")
   .option("--fallback-subtext <text>", "Additional fallback text (subtitle)")
   .option(
+    "-c, --config <file>",
+    "Poster configuration JSON file (see bundled poster-config.schema.json)",
+  )
+  .option(
     "--overwrite",
     "Replace an existing output PDF instead of skipping it",
   )
@@ -231,6 +248,7 @@ program
         logoWidth?: number;
         fallbackText?: string;
         fallbackSubtext?: string;
+        config?: string;
         overwrite?: boolean;
       },
     ) => {
@@ -263,6 +281,9 @@ program
         }
         if (orientation && orientation !== "landscape") {
           console.log(`PDF orientation: ${orientation}`);
+        }
+        if (options.config) {
+          console.log(`Poster config: ${options.config}`);
         }
 
         // Build style configuration
@@ -298,6 +319,11 @@ program
         }
         if (Object.keys(styleConfig).length > 0) {
           generateOptions.style = styleConfig;
+        }
+        if (options.config) {
+          generateOptions.posterConfig = await NsrBarcodeApi.loadPosterConfig(
+            options.config,
+          );
         }
         if (options.overwrite) {
           generateOptions.overwrite = true;

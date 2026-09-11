@@ -29,6 +29,7 @@ vi.mock("qrcode", () => {
 
 const { generatePdfsForStopPlaces } = await import("./pdfGenerator");
 const { NsrBarcodeApi } = await import("../api");
+const { loadFramPosterConfig } = await import("./posterConfig");
 
 function stopPlace(
   id: string,
@@ -120,6 +121,57 @@ describe("generatePdfsForStopPlaces", () => {
 
     expect(capturedQrUrls).toEqual([
       "https://reise.frammr.no/departures/NSR%3AStopPlace%3A10003?qr",
+    ]);
+  });
+
+  it("uses the explicit FRAM config identically to the implicit default", async () => {
+    const defaultOutputDirectory = await makeTempDir();
+    const configuredOutputDirectory = await makeTempDir();
+    const posterConfig = await loadFramPosterConfig();
+    const request = {
+      id: "NSR:StopPlace:10003",
+      name: "Same FRAM Poster",
+      transportMode: ["bus"],
+    };
+
+    const defaultResult = await generatePdfsForStopPlaces([request], {
+      outputDirectory: defaultOutputDirectory,
+    });
+    const configuredResult = await generatePdfsForStopPlaces([request], {
+      outputDirectory: configuredOutputDirectory,
+      posterConfig,
+    });
+
+    expect(defaultResult.failed).toEqual([]);
+    expect(configuredResult.failed).toEqual([]);
+    expect(capturedQrUrls).toEqual([
+      "https://reise.frammr.no/departures/NSR%3AStopPlace%3A10003?qr",
+      "https://reise.frammr.no/departures/NSR%3AStopPlace%3A10003?qr",
+    ]);
+    const defaultPdf = await fs.readFile(
+      defaultResult.generated[0]?.outputPath ?? "",
+    );
+    const configuredPdf = await fs.readFile(
+      configuredResult.generated[0]?.outputPath ?? "",
+    );
+    expect(readMediaBox(defaultPdf)).toEqual(readMediaBox(configuredPdf));
+  });
+
+  it("uses custom poster QR URL templates and supports posters without a logo", async () => {
+    const outputDirectory = await makeTempDir();
+    const posterConfig = await loadFramPosterConfig();
+    posterConfig.logo = null;
+    posterConfig.qrUrlTemplate =
+      "https://example.no/stops/{{encodedNsrId}}?name={{encodedStopName}}";
+
+    const result = await generatePdfsForStopPlaces(
+      [{ id: "NSR:StopPlace:10003", name: "Åsen øst" }],
+      { outputDirectory, posterConfig },
+    );
+
+    expect(result.failed).toEqual([]);
+    expect(capturedQrUrls).toEqual([
+      "https://example.no/stops/NSR%3AStopPlace%3A10003?name=%C3%85sen%20%C3%B8st",
     ]);
   });
 

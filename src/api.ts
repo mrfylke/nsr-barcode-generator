@@ -27,6 +27,17 @@ import {
   StopPlaceQrContext,
   StopPlaceRequest,
 } from "./utils/pdfGenerator";
+import {
+  loadFramPosterConfig,
+  loadPosterConfig,
+  PosterColors,
+  PosterConfig,
+  PosterLayoutConfig,
+  PosterLogoConfig,
+  PosterSection,
+  PosterTextGroup,
+  validatePosterConfig,
+} from "./utils/posterConfig";
 
 /**
  * Options shared by all PDF-generating API entry points, beyond the base
@@ -41,6 +52,8 @@ interface CommonPdfOptions {
   orientation?: "landscape" | "portrait";
   /** Style configuration for PDF appearance */
   style?: PdfStyleConfig;
+  /** Complete poster content and branding configuration. */
+  posterConfig?: PosterConfig;
   /**
    * Builds the complete QR code URL for a stop place. Falls back to the
    * package's built-in departures URL when omitted.
@@ -149,6 +162,9 @@ function buildPdfOptions(
   }
   if (options.style) {
     pdfOptions.style = options.style;
+  }
+  if (options.posterConfig) {
+    pdfOptions.posterConfig = options.posterConfig;
   }
   if (options.generateQrUrl) {
     pdfOptions.generateQrUrl = options.generateQrUrl;
@@ -339,6 +355,9 @@ export const NsrBarcodeApi = {
   validateNsrId,
   parseIds,
   parseIdsFromFile,
+  loadPosterConfig,
+  loadFramPosterConfig,
+  validatePosterConfig,
 };
 
 // Export types and errors for external use
@@ -356,6 +375,12 @@ export {
   PdfGenerationResult,
   PdfProgressEvent,
   PdfStyleConfig,
+  PosterColors,
+  PosterConfig,
+  PosterLayoutConfig,
+  PosterLogoConfig,
+  PosterSection,
+  PosterTextGroup,
   StopPlaceId,
   StopPlaceInput,
   StopPlaceQrContext,
