@@ -7,9 +7,20 @@
 
 import { Command } from "commander";
 import { version } from "../package.json";
-import { type IdParseError, NsrBarcodeApi, type PdfProgressEvent } from "./api";
+import {
+  builtInPosterConfigNames,
+  type IdParseError,
+  NsrBarcodeApi,
+  type PdfProgressEvent,
+} from "./api";
 
 const program = new Command();
+
+function printSupportedConfigs(): void {
+  for (const configName of builtInPosterConfigNames) {
+    console.log(configName);
+  }
+}
 
 /**
  * Prints each progress event to the console as it arrives, distinguishing
@@ -54,7 +65,8 @@ function logProgress(event: PdfProgressEvent): void {
 program
   .name("nsr-barcode")
   .description("Generate PDF files for unique IDs from input files")
-  .version(version);
+  .version(version)
+  .option("--list-configs", "List supported built-in poster configurations");
 
 program
   .command("file")
@@ -298,6 +310,13 @@ program
     }
   });
 
+program
+  .command("configs")
+  .alias("config")
+  .alias("list-configs")
+  .description("List supported built-in poster configurations")
+  .action(printSupportedConfigs);
+
 /**
  * Handle CLI errors with appropriate error messages and exit codes
  */
@@ -334,3 +353,7 @@ if (process.argv.length === 2) {
 }
 
 program.parse();
+
+if (program.opts().listConfigs) {
+  printSupportedConfigs();
+}
