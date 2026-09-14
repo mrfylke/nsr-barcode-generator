@@ -660,7 +660,7 @@ describe("generatePdfsForStopPlaces", () => {
     expect(result.pdfResult.generated).toHaveLength(1);
   });
 
-  it("resolves bundled fonts and images (no warnings, no network) even when process.cwd() is an unrelated temp directory", async () => {
+  it("generates with packaged Poppins fonts and no Helvetica even when process.cwd() is unrelated", async () => {
     const outputDirectory = await makeTempDir();
     const unrelatedCwd = await makeTempDir();
     const originalCwd = process.cwd();
@@ -680,6 +680,10 @@ describe("generatePdfsForStopPlaces", () => {
       if (!generated) throw new Error("Expected a generated PDF");
       const stats = await fs.stat(generated.outputPath);
       expect(stats.size).toBeGreaterThan(0);
+
+      const pdf = (await fs.readFile(generated.outputPath)).toString("latin1");
+      expect(pdf).toContain("Poppins");
+      expect(pdf).not.toContain("/BaseFont /Helvetica");
 
       const warnMessages = warnSpy.mock.calls.map((call) => String(call[0]));
       expect(
