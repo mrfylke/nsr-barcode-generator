@@ -568,6 +568,7 @@ async function generateSinglePdf(
     stage = "creating the PDF document";
     // Create a new PDF document with specified format/orientation
     const doc = new PDFDocument({
+      font: fonts.regular,
       size: format,
       layout: orientation,
       margins: {
