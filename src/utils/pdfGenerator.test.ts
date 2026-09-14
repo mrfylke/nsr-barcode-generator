@@ -5,6 +5,31 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { StopPlaceInfo } from "./enturApi";
 
 const capturedQrUrls: string[] = [];
+const writeStreamFailure = vi.hoisted(() => ({
+  error: undefined as unknown,
+  enabled: false,
+}));
+
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return {
+    ...actual,
+    createWriteStream: vi.fn(
+      (...args: Parameters<typeof actual.createWriteStream>) => {
+        const stream = actual.createWriteStream(...args);
+        if (writeStreamFailure.enabled) {
+          stream.once("open", () => {
+            stream.write("partial PDF output");
+            queueMicrotask(() =>
+              stream.emit("error", writeStreamFailure.error),
+            );
+          });
+        }
+        return stream;
+      },
+    ),
+  };
+});
 
 vi.mock("qrcode", () => {
   return {
@@ -57,10 +82,126 @@ function readMediaBox(buf: Buffer): [number, number] {
 
 afterEach(() => {
   capturedQrUrls.length = 0;
+  writeStreamFailure.enabled = false;
+  writeStreamFailure.error = undefined;
   vi.restoreAllMocks();
 });
 
 describe("generatePdfsForStopPlaces", () => {
+  it("preserves fields from a thrown plain object and reports the failing stage and output path", async () => {
+    const outputDirectory = await makeTempDir();
+    const thrown = {
+      message: "Access denied",
+      code: "EACCES",
+      path: "C:\\Lydfiler",
+    };
+
+    const result = await generatePdfsForStopPlaces(
+      [{ id: "NSR:StopPlace:10003", name: "Object Failure" }],
+      {
+        outputDirectory,
+        generateQrUrl: () => {
+          throw thrown;
+        },
+      },
+    );
+
+    expect(result.generated).toEqual([]);
+    expect(result.failed).toHaveLength(1);
+    const failure = result.failed[0];
+    expect(failure?.error).toContain(
+      "PDF generation failed while building the QR URL",
+    );
+    expect(failure?.error).toContain("Access denied");
+    expect(failure?.error).toContain("code: EACCES");
+    expect(failure?.error).toContain("path: C:\\Lydfiler");
+    expect(failure?.error).toContain(`(output: ${failure.outputPath})`);
+  });
+
+  it("preserves a thrown string", async () => {
+    const outputDirectory = await makeTempDir();
+
+    const result = await generatePdfsForStopPlaces(
+      [{ id: "NSR:StopPlace:10003", name: "String Failure" }],
+      {
+        outputDirectory,
+        generateQrUrl: () => {
+          throw "QR backend unavailable";
+        },
+      },
+    );
+
+    expect(result.failed[0]?.error).toContain("QR backend unavailable");
+    expect(result.failed[0]?.error).not.toContain("Unknown error");
+  });
+
+  it("safely serializes a circular plain object without masking the failure", async () => {
+    const outputDirectory = await makeTempDir();
+    const thrown: Record<string, unknown> = { operation: "build QR payload" };
+    thrown.self = thrown;
+
+    const result = await generatePdfsForStopPlaces(
+      [{ id: "NSR:StopPlace:10003", name: "Circular Failure" }],
+      {
+        outputDirectory,
+        generateQrUrl: () => {
+          throw thrown;
+        },
+      },
+    );
+
+    expect(result.failed[0]?.error).toContain('"operation":"build QR payload"');
+    expect(result.failed[0]?.error).toContain('"self":"[Circular]"');
+  });
+
+  it("reports write-stream failures and removes partial output", async () => {
+    const outputDirectory = await makeTempDir();
+    writeStreamFailure.enabled = true;
+    writeStreamFailure.error = {
+      name: "SystemError",
+      message: "Access denied",
+      code: "EACCES",
+      errno: -4092,
+      syscall: "open",
+      path: "C:\\Lydfiler\\example.pdf",
+    };
+
+    const result = await generatePdfsForStopPlaces(
+      [{ id: "NSR:StopPlace:10003", name: "Write Failure" }],
+      { outputDirectory },
+    );
+
+    expect(result.generated).toEqual([]);
+    const failure = result.failed[0];
+    expect(failure?.error).toContain(
+      "PDF generation failed while writing the PDF to disk",
+    );
+    expect(failure?.error).toContain("SystemError: Access denied");
+    expect(failure?.error).toContain("code: EACCES");
+    expect(failure?.error).toContain("errno: -4092");
+    expect(failure?.error).toContain("syscall: open");
+    expect(failure?.outputPath).toBeTruthy();
+    await expect(fs.stat(failure?.outputPath ?? "")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("still generates a non-empty PDF successfully", async () => {
+    const outputDirectory = await makeTempDir();
+
+    const result = await generatePdfsForStopPlaces(
+      [{ id: "NSR:StopPlace:10003", name: "Successful PDF" }],
+      { outputDirectory },
+    );
+
+    expect(result.failed).toEqual([]);
+    expect(result.generated).toHaveLength(1);
+    const outputPath = result.generated[0]?.outputPath ?? "";
+    expect((await fs.readFile(outputPath)).subarray(0, 5).toString()).toBe(
+      "%PDF-",
+    );
+  });
+
   it("invokes generateQrUrl with exactly { id, name } and uses the returned string verbatim as the QR payload", async () => {
     const outputDirectory = await makeTempDir();
     const generateQrUrl = vi.fn(
