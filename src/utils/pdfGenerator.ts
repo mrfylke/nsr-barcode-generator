@@ -169,6 +169,8 @@ export interface PdfGenerationItemResult {
 export interface PdfGenerationFailure {
   nsrId: string;
   error: string;
+  /** Attempted output path, when generation progressed far enough to determine it. */
+  outputPath?: string;
 }
 
 export interface PdfGenerationResult {
@@ -284,6 +286,7 @@ export async function generatePdfsForStopPlaces(
     const id = ids[i];
     if (!id) continue; // Skip if ID is undefined
     const current = i + 1;
+    let outputPath: string | undefined;
 
     try {
       const stopPlaceInfo = stopPlaceInfos[i] ?? null;
@@ -294,7 +297,7 @@ export async function generatePdfsForStopPlaces(
 
       // Generate safe filename from ID and stop place name
       const filename = generateSafeFilename(id, stopPlaceInfo.name);
-      const outputPath = join(outputDirectory, `${filename}.pdf`);
+      outputPath = join(outputDirectory, `${filename}.pdf`);
 
       if (!overwrite && (await pathExists(outputPath))) {
         skipped.push({ nsrId: id, outputPath });
@@ -327,13 +330,18 @@ export async function generatePdfsForStopPlaces(
         status: "generated",
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      failed.push({ nsrId: id, error: message });
+      const message = formatUnknownError(error);
+      failed.push({
+        nsrId: id,
+        error: message,
+        ...(outputPath ? { outputPath } : {}),
+      });
       onProgress?.({
         type: "generation",
         current,
         total,
         nsrId: id,
+        ...(outputPath ? { outputPath } : {}),
         status: "error",
         error: message,
       });
@@ -348,6 +356,142 @@ export async function generatePdfsForStopPlaces(
     skipped,
     failed,
   };
+}
+
+const errorDetailKeys = ["code", "errno", "syscall", "path"] as const;
+
+function safelyReadProperty(value: object, key: PropertyKey): unknown {
+  try {
+    return Reflect.get(value, key);
+  } catch (error) {
+    return `[Unreadable: ${formatUnknownError(error)}]`;
+  }
+}
+
+function safelySerialize(value: unknown): string | undefined {
+  const seen = new WeakSet<object>();
+
+  const sanitize = (current: unknown, depth: number): unknown => {
+    if (
+      current === null ||
+      typeof current === "string" ||
+      typeof current === "boolean"
+    ) {
+      return current;
+    }
+    if (typeof current === "number") {
+      return Number.isFinite(current) ? current : String(current);
+    }
+    if (typeof current === "bigint" || typeof current === "symbol") {
+      return String(current);
+    }
+    if (typeof current === "undefined") return "[undefined]";
+    if (typeof current === "function") {
+      return `[Function${current.name ? `: ${current.name}` : ""}]`;
+    }
+    if (depth >= 5) return "[Max depth]";
+    if (seen.has(current)) return "[Circular]";
+    seen.add(current);
+
+    if (Array.isArray(current)) {
+      return current.slice(0, 50).map((item) => sanitize(item, depth + 1));
+    }
+
+    let keys: PropertyKey[];
+    try {
+      keys = Reflect.ownKeys(current).slice(0, 50);
+    } catch (error) {
+      return `[Unreadable object: ${formatUnknownError(error)}]`;
+    }
+
+    const result: Record<string, unknown> = {};
+    for (const key of keys) {
+      const printableKey = typeof key === "symbol" ? String(key) : key;
+      result[printableKey] = sanitize(
+        safelyReadProperty(current, key),
+        depth + 1,
+      );
+    }
+    return result;
+  };
+
+  try {
+    const serialized = JSON.stringify(sanitize(value, 0));
+    return serialized && serialized !== "{}" ? serialized : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Formats values thrown by libraries and runtimes without assuming they are
+ * same-realm Error instances. This function must itself never throw.
+ */
+function formatUnknownError(
+  error: unknown,
+  seenCauses: WeakSet<object> = new WeakSet<object>(),
+): string {
+  try {
+    if (typeof error === "string") return error || "Unknown error";
+    if (
+      typeof error === "number" ||
+      typeof error === "bigint" ||
+      typeof error === "boolean" ||
+      typeof error === "symbol"
+    ) {
+      return String(error);
+    }
+    if (
+      (typeof error !== "object" || error === null) &&
+      typeof error !== "function"
+    ) {
+      return "Unknown error";
+    }
+    if (seenCauses.has(error)) return "[Circular]";
+    seenCauses.add(error);
+
+    const message = safelyReadProperty(error, "message");
+    const name = safelyReadProperty(error, "name");
+    const messageText =
+      typeof message === "string" && message.length > 0 ? message : undefined;
+    const nameText =
+      typeof name === "string" && name.length > 0 ? name : undefined;
+
+    let summary: string | undefined;
+    if (messageText && nameText) {
+      summary = `${nameText}: ${messageText}`;
+    } else {
+      summary = messageText ?? nameText;
+    }
+
+    const details: string[] = [];
+    for (const key of errorDetailKeys) {
+      const detail = safelyReadProperty(error, key);
+      if (detail !== undefined && detail !== null && detail !== "") {
+        const serialized =
+          typeof detail === "string" ? detail : safelySerialize(detail);
+        details.push(`${key}: ${serialized ?? String(detail)}`);
+      }
+    }
+
+    const cause = safelyReadProperty(error, "cause");
+    if (cause !== undefined && cause !== null && cause !== error) {
+      details.push(`cause: ${formatUnknownError(cause, seenCauses)}`);
+    } else if (cause === error) {
+      details.push("cause: [Circular]");
+    }
+
+    if (summary) {
+      return details.length > 0
+        ? `${summary} (${details.join(", ")})`
+        : summary;
+    }
+
+    if (details.length > 0) return details.join(", ");
+    return safelySerialize(error) ?? "Unknown error";
+  } catch {
+    return "Unknown error";
+  }
 }
 
 /**
@@ -381,16 +525,47 @@ async function generateSinglePdf(
   options?: PdfGenerationOptions,
   posterConfig?: PosterConfig,
 ): Promise<void> {
-  let stream: ReturnType<typeof createWriteStream>;
+  type PdfGenerationStage =
+    | "loading fonts/assets"
+    | "creating the PDF document"
+    | "rendering the header/content"
+    | "building the QR URL"
+    | "generating the QR code"
+    | "finalizing the document"
+    | "writing the PDF to disk";
+
+  let stage: PdfGenerationStage = "writing the PDF to disk";
+  let stream: ReturnType<typeof createWriteStream> | undefined;
+  let streamCompletion: Promise<void> | undefined;
+  let streamFailure: unknown;
+  let hasStreamFailure = false;
 
   try {
+    // Observe the output from the instant it exists. Open/write failures can
+    // arrive before rendering completes on Windows and in runtimes like Bun.
+    stream = createWriteStream(outputPath);
+    streamCompletion = new Promise<void>((resolve, reject) => {
+      stream?.once("finish", resolve);
+      stream?.once("error", (error: unknown) => {
+        hasStreamFailure = true;
+        streamFailure = error;
+        reject(error);
+      });
+    });
+    // Rendering contains awaited operations, so mark the rejection handled
+    // immediately and consume it at the end (or prioritize it in the catch).
+    void streamCompletion.catch(() => undefined);
+
+    stage = "loading fonts/assets";
     // Load Poppins fonts
     const fonts = await fontLoader.loadPoppins(options?.assetsDirectory);
+    if (hasStreamFailure) throw streamFailure;
 
     // Get orientation (default to landscape for backward compatibility)
     const orientation = options?.orientation || "landscape";
     const format = options?.format || "A4";
 
+    stage = "creating the PDF document";
     // Create a new PDF document with specified format/orientation
     const doc = new PDFDocument({
       size: format,
@@ -423,10 +598,9 @@ async function generateSinglePdf(
       );
     }
 
-    // Create write stream
-    stream = createWriteStream(outputPath);
     doc.pipe(stream);
 
+    stage = "rendering the header/content";
     // Get page dimensions
     const pageWidth = doc.page.width;
     const pageHeight = doc.page.height;
@@ -435,6 +609,7 @@ async function generateSinglePdf(
     const config =
       posterConfig ??
       (await resolvePosterConfig(undefined, options?.assetsDirectory));
+    if (hasStreamFailure) throw streamFailure;
 
     const headerFooterColor = config.colors.headerFooter;
     const headerTextColor = config.colors.headerText;
@@ -562,6 +737,7 @@ async function generateSinglePdf(
     const contentHeight = orientation === "portrait" ? 400 : 310; // More vertical space needed for portrait
     const contentY = headerHeight + (availableHeight - contentHeight) / 2;
 
+    stage = "building the QR URL";
     // Determine the QR code payload
     let qrUrl: string;
     if (options?.generateQrUrl) {
@@ -589,6 +765,7 @@ async function generateSinglePdf(
       }
     }
 
+    stage = "generating the QR code";
     const qrCodeDataURL = await QRCode.toDataURL(qrUrl, {
       width: 200,
       margin: 1,
@@ -597,7 +774,9 @@ async function generateSinglePdf(
         light: config.colors.qrLight,
       },
     });
+    if (hasStreamFailure) throw streamFailure;
 
+    stage = "rendering the header/content";
     const base64Data = qrCodeDataURL.split(",")[1];
     let qrCodeBuffer: Buffer | null = null;
     if (base64Data) {
@@ -748,24 +927,45 @@ async function generateSinglePdf(
       }
     }
 
+    stage = "finalizing the document";
     // Finalize the PDF
     doc.end();
+
+    stage = "writing the PDF to disk";
+    await streamCompletion;
   } catch (error) {
+    const originalError = hasStreamFailure ? streamFailure : error;
+    const failureStage = hasStreamFailure ? "writing the PDF to disk" : stage;
+
+    if (stream) {
+      await closeOutputStreamSafely(stream);
+    }
+    try {
+      await fs.rm(outputPath, { force: true });
+    } catch {
+      // Cleanup is best-effort and must never replace the generation error.
+    }
+
     throw new Error(
-      `PDF generation failed: ${
-        error instanceof Error ? error.message : "Unknown error"
-      }`,
+      `PDF generation failed while ${failureStage}: ${formatUnknownError(
+        originalError,
+      )} (output: ${outputPath})`,
     );
   }
+}
 
-  await new Promise<void>((resolve, reject) => {
-    stream.on("finish", () => {
-      resolve();
-    });
+async function closeOutputStreamSafely(
+  stream: ReturnType<typeof createWriteStream>,
+): Promise<void> {
+  if (stream.closed) return;
 
-    stream.on("error", (error) => {
-      reject(new Error(`Failed to write PDF: ${error.message}`));
-    });
+  await new Promise<void>((resolveClose) => {
+    stream.once("close", resolveClose);
+    try {
+      stream.destroy();
+    } catch {
+      resolveClose();
+    }
   });
 }
 
